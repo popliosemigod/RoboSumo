@@ -1,0 +1,36 @@
+# ---- PlatformIO -----------------------------------------------------
+.pio/
+.pioenvs/
+.piolibdeps/
+.clang_complete
+.gcc-flags.json
+compile_commands.json
+
+# ---- Arduino IDE ----------------------------------------------------
+build/
+*.hex
+*.elf
+*.bin
+*.map
+*.d
+*.o
+
+# ---- VSCode ---------------------------------------------------------
+# O .vscode e versionado so no que ajuda o time; o resto e local.
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+
+# ---- Python (pre-commit / commitizen) -------------------------------
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# ---- Sistema --------------------------------------------------------
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+*~

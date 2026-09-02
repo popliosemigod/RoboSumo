@@ -1,0 +1,56 @@
+name: build
+
+# Compila o firmware a cada push nas branches principais e em todo PR.
+# O binario fica anexado ao run por 30 dias, entao da para gravar por OTA
+# direto do painel web sem precisar de PC com toolchain.
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache do PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            .pio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Instala o PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Compila
+        run: pio run
+
+      - name: Publica o binario
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: .pio/build/esp32dev/firmware.bin
+          retention-days: 30
+
+  commits:
+    # So faz sentido em PR: valida que as mensagens seguem Conventional Commits.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install commitizen
+      - name: Valida as mensagens de commit
+        run: cz check --rev-range origin/${{ github.base_ref }}..HEAD

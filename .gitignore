@@ -28,6 +28,12 @@ venv/
 __pycache__/
 *.pyc
 
+# ---- Notas de trabalho ----------------------------------------------
+# Estado da bancada, pendencias e armadilhas ja encontradas. Fica fora do
+# git de proposito: e caderno de sessao, muda toda hora e nao interessa a
+# quem clona o repositorio. Recarregar no comeco de cada sessao.
+CONTEXTO.md
+
 # ---- Sistema --------------------------------------------------------
 Thumbs.db
 desktop.ini

@@ -87,22 +87,31 @@ GND: um único ponto comum entre bateria, buck, Nano, drivers e sensores.
 
 ### ⚠ O ponto que pode queimar sensor
 
-O Nano fala I2C em **5 V**. O VL53L0X aguenta **3,6 V** no máximo em `SDA`, `SCL`
-e `XSHUT` (Tab. 6 da datasheet). Isso inverte a recomendação que valia no ESP32:
+**Módulo em uso: CJMCU-53L0X V2** (placa roxa), pinagem `VCC · GND · SCL · SDA ·
+GPIO1 · XSHUT`. `GPIO1` é a saída de interrupção do sensor e fica sem ligar —
+a datasheet diz explicitamente "GPIO1 to be left unconnected if not used".
 
-- **Módulo GY-530 / GY-VL53L0XV2** (o comum, com regulador e conversor de nível
-  a bordo): alimente **VIN em 5 V**. O conversor passa a referenciar 5 V e o
-  sensor fica protegido. Alimentar em 3V3 com I2C de 5 V é que seria errado.
-- **Breakout "pelado"**, sem regulador nem conversor: **não ligue direto.**
-  Precisa de conversor de nível bidirecional nas duas linhas, ou o sensor morre.
+O Nano fala I2C em **5 V**. O silício do VL53L0X aguenta **3,6 V** no máximo em
+`SDA`, `SCL` e `XSHUT` (Tab. 6 da datasheet). Ou seja: a recomendação **inverte**
+em relação ao ESP32, e depende de o módulo ter conversor de nível a bordo.
 
-Como saber qual você tem: olhe o módulo. Se houver um CI de 6 pinos perto dos
-pinos de alimentação e um segundo pequeno perto de SDA/SCL, é a versão com
-regulador + conversor. Na dúvida, meça `VIN` contra o pino de alimentação do
-sensor: se der ~2,8 V com VIN em 5 V, há regulador.
+**Meça antes de ligar no Nano. Dois minutos, e é decisivo:**
 
-O `XSHUT` sai do Nano em 5 V direto para o sensor — nos módulos com conversor
-ele também passa pelo shifter; nos pelados, precisa de divisor.
+1. Alimente **só o módulo**: `VCC` em 5 V, `GND` no GND. Nada mais conectado.
+2. Meça a tensão contínua entre o pino **`SDA`** e o GND, com o módulo parado.
+
+| Leitura | O que significa | O que fazer |
+|---|---|---|
+| ≈ **5 V** | há conversor de nível, e os pull-ups referenciam o VCC | ligue direto no Nano com `VCC` em **5 V** |
+| ≈ **2,8 V** | os pull-ups estão do lado do sensor, sem conversor | **não ligue direto** — precisa de conversor bidirecional em SDA e SCL, e divisor no XSHUT |
+
+O raciocínio: em repouso o barramento fica em alto puxado pelos pull-ups. A
+tensão em que ele repousa denuncia de que lado do conversor esses resistores
+estão. É a mesma pergunta que a sonda de linha do firmware responde, só que
+aqui feita antes de energizar a lógica.
+
+Alimentar o módulo em 3V3 **não** é o caminho seguro aqui: o que queima o sensor
+não é o VCC, é o nível de 5 V que o Nano coloca nas linhas de sinal.
 
 ---
 
@@ -161,6 +170,7 @@ A serial a 115200 é a única interface. Uma tecla dispara cada função:
 | `a` | arma / desarma |
 | `s` | autoteste: varre o I2C e, se não achar ninguém, faz a sonda elétrica de A4/A5 |
 | `e` | exame dos olhos: varre com XSHUT em baixo, alto e solto |
+| `i` | **identidade dos olhos**: lê 0xC0/0xC1/0xC2 e confirma que é mesmo um VL53L0X |
 | `b` | buzzer |
 | `m` | monitor a 20 Hz por 10 s — linhas `#M ms dL dR irLa irRa irLdo irRdo` |
 | `p` | 60 s de leitura contínua para **ajustar o trimpot** do IR |
@@ -168,6 +178,14 @@ A serial a 115200 é a única interface. Uma tecla dispara cada função:
 | `?` | ajuda |
 
 A cada segundo sai uma linha `#D chave=valor` com o estado completo.
+
+### Por que existe a tecla `i`
+
+A varredura I2C responde "alguém respondeu em 0x29" — não responde "e esse
+alguém é um VL53L0X". A Tab. 4 da datasheet dá três registradores de identidade
+que existem desde o reset e nunca mudam: `0xC0=0xEE`, `0xC1=0xAA`, `0xC2=0x10`.
+Lendo os três, módulo trocado, endereço coincidente de outro periférico e sensor
+morto que ainda dá ACK deixam de se parecer com sensor bom.
 
 > **Inversão de sintoma que vai confundir:** aqui D2 e D4 **têm** pull-up interno.
 > Pino de IR solto lê **ALTO**, não BAIXO como no ESP32. O sinal de fio solto é o

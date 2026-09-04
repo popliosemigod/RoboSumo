@@ -383,6 +383,39 @@ void autoteste() {
   Serial.println(F("[teste] --- fim ---"));
 }
 
+// Identidade do sensor. A Tab. 4 da datasheet do VL53L0X da tres
+// registradores que existem "apos reset, sem a API carregada" e que nao
+// mudam nunca: 0xC0=0xEE, 0xC1=0xAA, 0xC2=0x10. Sao o modelo e a revisao.
+//
+// Isso responde uma pergunta que a varredura I2C nao responde: alguem
+// respondeu naquele endereco, mas E um VL53L0X? Modulo trocado, endereco
+// coincidente de outro periferico ou sensor morto que ainda faz ACK
+// aparecem todos como "achei 0x29" numa varredura comum.
+static void identifica(uint8_t addr) {
+  Serial.print(F("[id] 0x")); Serial.print(addr, HEX); Serial.print(F(": "));
+  uint8_t reg[3] = {0xC0, 0xC1, 0xC2};
+  uint8_t esperado[3] = {0xEE, 0xAA, 0x10};
+  bool ok = true;
+  for (uint8_t i = 0; i < 3; i++) {
+    Wire.beginTransmission(addr);
+    Wire.write(reg[i]);
+    if (Wire.endTransmission() != 0) { Serial.println(F("nao respondeu")); return; }
+    if (Wire.requestFrom(addr, (uint8_t)1) != 1) { Serial.println(F("sem dado")); return; }
+    uint8_t v = Wire.read();
+    Serial.print(F("0x")); Serial.print(reg[i], HEX);
+    Serial.print('='); Serial.print(v, HEX); Serial.print(' ');
+    if (v != esperado[i]) ok = false;
+  }
+  Serial.println(ok ? F("-> VL53L0X confirmado") : F("-> NAO e um VL53L0X"));
+}
+
+void identificaOlhos() {
+  Serial.println(F("[id] --- identidade dos olhos (Tab. 4: EE AA 10) ---"));
+  identifica(TOF_ADDR_L);
+  identifica(TOF_ADDR_R);
+  Serial.println(F("[id] --- fim ---"));
+}
+
 // Exame dos olhos: varre com XSHUT baixo/alto/solto para separar as
 // causas que a varredura simples nao separa.
 void exameOlhos() {
@@ -621,6 +654,7 @@ uint32_t monAte = 0;
 
 void ajuda() {
   Serial.println(F("[cmd] a=armar/parar  s=autoteste  e=exame dos olhos"));
+  Serial.println(F("[cmd] i=identidade dos olhos (confirma que E um VL53L0X)"));
   Serial.println(F("[cmd] b=buzzer  m=monitor 20Hz por 10s  p=ajustar trimpot do IR"));
   Serial.println(F("[cmd] 1/2/3=modo NORMAL/LESMA/CAPIROTO  ?=ajuda"));
 }
@@ -631,6 +665,7 @@ void console() {
       case 'a': if (T.armed) Brain::disarm(); else Brain::arm(); break;
       case 's': autoteste(); break;
       case 'e': exameOlhos(); break;
+      case 'i': identificaOlhos(); break;
       case 'b': Snd::beep(1500, 150); break;
       case 'm': monAte = millis() + 10000; Serial.println(F("#MONINI")); break;
       case 'p':                                  // ajuste do trimpot

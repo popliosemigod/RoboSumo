@@ -32,7 +32,7 @@ ambiente próprio e os dois não se misturam.
 
 | Pino | Função | Ligar em |
 |------|--------|----------|
-| **A0** | *livre* | só se o módulo IR tiver saída `AO` (ver §2.1) |
+| **A0** | *livre* | só se o módulo IR tiver saída `AO` (ver 1.1) |
 | **A1** | *livre* | idem, lado direito |
 | **A2** | Leitura de bateria | nó do divisor 100 k / 47 k |
 | **A3** | Botão ARMAR | botão para GND (pull-up interno) |
@@ -40,7 +40,7 @@ ambiente próprio e os dois não se misturam.
 | **A5** | **SCL** | OLED **e** os dois VL53L0X |
 | A6, A7 | livres | só entrada analógica, sem função digital |
 
-### 2.1 Módulo IR de três fios — o caso deste projeto
+### 1.1 Módulo IR de três fios — o caso deste projeto
 
 Os módulos em uso têm **VCC, GND e `OUT`** — três fios, sem saída analógica.
 `OUT` é a saída do comparador, o equivalente ao `DO` dos módulos de quatro pinos.

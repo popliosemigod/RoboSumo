@@ -46,13 +46,19 @@
 #define PIN_IR_L_D      34   // saida digital IR esquerdo (interrupcao - so entrada)
 
 // ---- Olhos: 2x VL53L0X (Time-of-Flight, I2C) ------------------------
-//  Barramento I2C DEDICADO (Wire1), separado do OLED de proposito:
-//  um quadro do OLED ocupa a linha por ~25 ms e atrasaria a leitura de
-//  distancia justamente durante a investida.
+//  UM SO BARRAMENTO: os olhos foram para 21/22, junto com o OLED.
+//
+//  O desenho anterior dava barramento dedicado a eles (Wire1 em 16/17)
+//  por um bom motivo: um quadro do OLED ocupa a linha por ~25 ms e isso
+//  atrasaria a leitura de distancia justamente na investida. A separacao
+//  caiu por um motivo de bancada, nao de projeto - o GPIO 17 estava
+//  grampeado em 3,3 V e sem clock nao existe I2C. O preco esta pago em
+//  face.h: o desenho e suspenso enquanto o robo ataca ou salva borda.
+//
 //  SDA/SCL sao COMPARTILHADOS pelos dois sensores; o que os separa e o
 //  XSHUT, que permite ligar um de cada vez no boot e reendereçar.
-#define PIN_TOF_SDA     16
-#define PIN_TOF_SCL     17
+#define PIN_TOF_SDA     21
+#define PIN_TOF_SCL     22
 #define PIN_TOF_L_XSHUT 19   // XSHUT e ativo em nivel BAIXO (datasheet Tab. 2)
 #define PIN_TOF_R_XSHUT 18
 #define TOF_ADDR_L      0x30 // reendereçado no boot
@@ -61,13 +67,20 @@
 // Perfil "high speed" da Tab. 13: 20 ms de orcamento -> ~50 leituras/s
 #define TOF_BUDGET_US   20000
 
-// ---- I2C do OLED (Wire) ---------------------------------------------
+// ---- I2C do OLED (Wire) - o MESMO barramento dos olhos --------------
 #define PIN_SDA         21
 #define PIN_SCL         22
 
 // ---- Diversos -------------------------------------------------------
 #define PIN_BUZZER       4   // buzzer passivo via NPN (2N2222) ou direto se piezo
-#define PIN_BTN         23   // botao START/STOP (para GND, pull-up interno)
+// Tensao minima de pack para o robo armar sozinho no boot. Uma LiPo 2S
+// descarregada ainda passa de 6 V; alimentado so pelo USB, o divisor le
+// quase zero. E esse degrau que separa "estou na arena" de "estou na
+// bancada" - ver o fim do setup() em RoboSumo.ino.
+#define VBAT_ARMA_V   6.0f
+
+// GPIO 23 ficou LIVRE: o botao de armar saiu do projeto. Quem arma e
+// ligar a placa - ver o fim do setup() em RoboSumo.ino.
 #define PIN_VBAT        39   // ADC1_CH3 - divisor 100k/47k da bateria
 #define PIN_LED          2   // LED da placa
 

@@ -21,7 +21,7 @@ sem internet.
 | 1 | Transistor 2N2222 + resistor 1 k | driver do buzzer (opcional se piezo pequeno) |
 | 1 | Regulador buck 5 V 2 A (MP1584 / LM2596) | alimenta ESP32 e sensores |
 | 1 | Bateria LiPo 2S 7,4 V ≥ 900 mAh 25C | alimenta os DRV8833 direto |
-| 1 | Chave gangorra + botão momentâneo | liga/desliga e ARMAR |
+| 1 | Chave gangorra | liga/desliga — **ligar já é armar** |
 | — | 3× 10 kΩ, 100 kΩ, 47 kΩ | pull-down do `nSLEEP`, pull-up do `nFAULT` e divisor da bateria |
 | — | 1× 470 µF 16 V, 4× 100 nF | desacoplamento |
 
@@ -46,14 +46,14 @@ o que deixa a fiação limpa e o chicote curto.
 | 32 | IR esquerdo — saída analógica | AO do módulo IR esquerdo |
 | 35 | IR direito — saída digital | DO do módulo IR direito (interrupção) |
 | 34 | IR esquerdo — saída digital | DO do módulo IR esquerdo (interrupção) |
-| 39 (VN) | Leitura da bateria | divisor 100 k / 47 k na saída da LiPo |
+| 39 (VN) | Leitura da bateria | divisor 100 k / 47 k na saída da LiPo — **também decide se o robô arma sozinho no boot** |
 | 36 (VP) | — livre | |
 
 ### Lateral B do header (`D23 D22 TX D21 D19 D18 D5 D17 D16 D4 D2 D15`)
 
 | GPIO | Função | Ligado em |
 |------|--------|-----------|
-| 23 | Botão ARMAR/PARAR | botão para GND (pull-up interno) |
+| 23 | *livre* | o botão de armar saiu do projeto |
 | 22 | I2C SCL | OLED SCL |
 | 21 | I2C SDA | OLED SDA |
 | 19 | `XSHUT` do olho esquerdo | VL53L0X esquerdo · XSHUT |
@@ -176,7 +176,7 @@ Todo ajuste feito nos sliders é **base**; o modo escolhido multiplica em cima.
 ## 7. Lógica de funcionamento
 
 ```
-IDLE ──ARMAR──► COUNTDOWN(5 s, bipes) ──► BUSCA
+IDLE ──LIGAR/painel/'a'──► COUNTDOWN(5 s, bipes) ──► BUSCA
                                             │ viu algo
                                             ▼
                                           TRAVANDO ──confirmou N leituras──► ATAQUE

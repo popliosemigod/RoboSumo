@@ -83,7 +83,7 @@
 // ---------------------------------------------------------------------
 #define PIN_BUZZER       3   // tone() -> Timer2, sozinho nele
 #define PIN_LED         13   // LED de bordo: pisca quando armado
-#define PIN_BTN         A3   // botao ARMAR, para GND, pull-up interno
+// A3 ficou livre: o botao de armar saiu do projeto inteiro.
 #define PIN_VBAT        A2   // divisor 100k/47k da bateria
 
 // A4 = SDA e A5 = SCL sao fixos no ATmega328P.

@@ -95,17 +95,25 @@ void controlTask(void*) {
     // estiver fora do ar, entao da para calibrar/depurar so com o cabo USB.
     if (millis() - dbgT >= 1000) {
       dbgT = millis();
-      auto tofTxt = [](bool presente, int16_t mm) -> const char* {
-        if (!presente) return "AUSENTE no barramento";
-        if (mm < 0)    return "sem alvo no alcance";
+      // O motivo da leitura invalida importa: "nada na frente" e um
+      // sensor saudavel, "timeout" e um sensor que nao esta conversando.
+      // O valor cru separa os dois - 8190 mm e a resposta do proprio
+      // VL53L0X para "nao achei alvo"; 65535 vem da biblioteca quando o
+      // sensor nao respondeu a tempo.
+      auto tofTxt = [](bool presente, int16_t mm, int16_t cm) -> const char* {
+        if (!presente)    return "AUSENTE no barramento";
+        if (mm >= 32000)  return "TIMEOUT - sensor nao respondeu";
+        if (mm >= 8000)   return "vazio: nada na frente";
+        if (mm == 0)      return "leitura zero - suspeito";
+        if (cm < 0)       return "alvo alem do alcance util";
         return "medindo";
       };
       Serial.printf(
         "[OLHO] esq: %4dcm (%s, cru=%dmm, falhas=%u) | dir: %4dcm (%s, cru=%dmm, falhas=%u)\n"
         "[IR  ] esq: pino=%s AO=%4u -> %s | dir: pino=%s AO=%4u -> %s\n"
         "[SYS ] estado=%-9s vbat=%.2fV loop=%uHz heap=%u\n",
-        T.distL, tofTxt(T.tofOkL, T.tofRawL), T.tofRawL, T.tofFailL,
-        T.distR, tofTxt(T.tofOkR, T.tofRawR), T.tofRawR, T.tofFailR,
+        T.distL, tofTxt(T.tofOkL, T.tofRawL, T.distL), T.tofRawL, T.tofFailL,
+        T.distR, tofTxt(T.tofOkR, T.tofRawR, T.distR), T.tofRawR, T.tofFailR,
         digitalRead(PIN_IR_L_D) ? "ALTO" : "BAIXO", T.irLraw, T.irL ? "BORDA" : "seguro",
         digitalRead(PIN_IR_R_D) ? "ALTO" : "BAIXO", T.irRraw, T.irR ? "BORDA" : "seguro",
         STATE_NAME[T.state], T.vbat / 100.0f, T.loopHz, ESP.getFreeHeap());
@@ -202,7 +210,6 @@ void pollSerialCmd() {
         Serial.println("#TOFINI");
         break;
       case 'e': Sens::exameOlhos(); break;
-      case 'w': Sens::testeWire1(); break;
       case 'f': rajadaIR(); break;
       case 'i': Sens::i2cNaUnha(); break;
       case 'k': Sens::sondaModulo(); break;
@@ -224,30 +231,17 @@ void pollSerialCmd() {
 }
 
 // ---------------------------------------------------------------------
-//  TASK DE HOUSEKEEPING - core 0: bateria, botao fisico e console serial
+//  TASK DE HOUSEKEEPING - core 0: bateria e console serial
+//
+//  O botao fisico saiu do projeto. Armar deixou de ser um gesto na
+//  carcaca: quem arma e aplicar energia na placa (ver o fim do setup).
+//  Trocar de modo e desarmar continuam existindo pelo painel e pela
+//  serial, que sao as duas interfaces que sobraram.
 // ---------------------------------------------------------------------
 void houseTask(void*) {
-  uint32_t pressAt = 0; bool longDone = false;
   for (;;) {
     Sens::pollVbat();
     pollSerialCmd();
-
-    bool down = (digitalRead(PIN_BTN) == LOW);
-    if (down && !pressAt) { pressAt = millis(); longDone = false; }
-    if (down && pressAt && !longDone && millis() - pressAt > 1200) {
-      // pressao longa: troca de modo
-      P.mode = (P.mode + 1) % MODE_COUNT;
-      Brain::applyMode();
-      Snd::beep(900 + P.mode * 180, 90); Snd::beep(0, 60);
-      Face::say(MODE_NAME[P.mode]);
-      longDone = true;
-    }
-    if (!down && pressAt) {
-      if (!longDone) {                       // toque curto: arma / desarma
-        if (T.armed) Brain::disarm(); else Brain::arm();
-      }
-      pressAt = 0;
-    }
 
     digitalWrite(PIN_LED, T.armed ? ((millis() / 200) % 2) : LOW);
     vTaskDelay(pdMS_TO_TICKS(40));
@@ -261,7 +255,6 @@ void setup() {
   Serial.println("\n================ ROBO SUMO - boot ================");
   Serial.printf("[boot] firmware v%s  (compilado em %s %s)\n", FW_VERSION, __DATE__, __TIME__);
 
-  pinMode(PIN_BTN, INPUT_PULLUP);
   pinMode(PIN_LED, OUTPUT);
 
   Web::loadParams();               // parametros salvos na NVS (ou padrao)
@@ -290,6 +283,7 @@ void setup() {
                 Web::AP_SSID, Web::ipStr);
   Serial.println("A cada segundo este monitor vai mostrar a leitura dos sensores.");
   Serial.println("Atalhos por aqui: t=display  s=autoteste  b=buzzer  a=armar/parar");
+  Serial.println("Nao ha mais botao de armar: quem arma e ligar a placa.");
   Serial.println("Calibrar IR:      d=capturar ESCURO  c=capturar CLARO  x=zerar  (? = ajuda)");
   Serial.println("====================================================\n");
 
@@ -304,6 +298,32 @@ void setup() {
   xTaskCreatePinnedToCore(Web::task,       "web",     8192, nullptr, 2, nullptr, 0);
   xTaskCreatePinnedToCore(uiTask,          "ui",      6144, nullptr, 1, nullptr, 0);
   xTaskCreatePinnedToCore(houseTask,       "house",   3072, nullptr, 1, nullptr, 0);
+
+  // ---- armar --------------------------------------------------------
+  //  "Armar" deixou de ser botao: quem arma e ligar a placa.
+  //
+  //  O primeiro guarda que tentei aqui foi o esp_reset_reason(), e ele
+  //  NAO serve: puxar o pino EN e indistinguivel de aplicar energia para
+  //  o RTC, entao todo reset do gravador vinha como ESP_RST_POWERON e o
+  //  robo armava sozinho a cada upload. Foi visto na bancada.
+  //
+  //  O que separa bancada de luta nao e o tipo de reset, e a BATERIA. Na
+  //  bancada a placa vive do USB e o divisor de VBAT le perto de zero; na
+  //  arena a LiPo 2S esta ligada. Entao o criterio e fisico: so arma se o
+  //  pack estiver presente.
+  //
+  //  Mesmo armando, nada gira na hora: entra a contagem de 5 s com bipes,
+  //  e nesses 5 s a tecla 'a' ou o painel cancelam.
+  for (uint8_t i = 0; i < 12; i++) { Sens::pollVbat(); delay(10); }
+  float vbat = T.vbat / 100.0f;
+  if (vbat >= VBAT_ARMA_V) {
+    Serial.printf("[boot] bateria presente (%.2f V) -> ARMANDO."
+                  " 5 s de contagem; 'a' cancela.\n", vbat);
+    Brain::arm();
+  } else {
+    Serial.printf("[boot] sem bateria (VBAT %.2f V, limiar %.1f V) -> fica em IDLE."
+                  " E bancada: arma com 'a' ou pelo painel.\n", vbat, (double)VBAT_ARMA_V);
+  }
 }
 
 void loop() {

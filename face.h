@@ -360,7 +360,7 @@ void splash(const char* ip) {
   oled.setCursor(0, 30); oled.print("http://");
   oled.setCursor(42, 30); oled.print(ip);
   oled.setCursor(0, 44); oled.print("http://robosumo.local");
-  oled.setCursor(0, 56); oled.print("botao/painel = ARMAR");
+  oled.setCursor(0, 56); oled.print("liga = arma em 5s");
   oled.display();
 }
 

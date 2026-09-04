@@ -52,11 +52,11 @@ inline bool caolho() { return haveL != haveR; }
 // justamente "to validate the user I2C interface". Sem essa checagem o
 // init() da biblioteca consegue "dar certo" falando com o vazio.
 static bool tofResponde(uint8_t addr) {
-  Wire1.beginTransmission(addr);
-  Wire1.write((uint8_t)0xC0);
-  if (Wire1.endTransmission() != 0) return false;
-  if (Wire1.requestFrom((uint8_t)addr, (uint8_t)1) != 1) return false;
-  return (Wire1.read() == 0xEE);
+  Wire.beginTransmission(addr);
+  Wire.write((uint8_t)0xC0);
+  if (Wire.endTransmission() != 0) return false;
+  if (Wire.requestFrom((uint8_t)addr, (uint8_t)1) != 1) return false;
+  return (Wire.read() == 0xEE);
 }
 
 static bool configura(VL53L0X& s) {
@@ -74,7 +74,7 @@ static bool bringUp(VL53L0X& s, uint8_t xshut, uint8_t addr, const char* nome) {
     digitalWrite(xshut, LOW);         // desliga p/ nao atrapalhar o outro
     return false;
   }
-  s.setBus(&Wire1);
+  s.setBus(&Wire);
   s.setTimeout(150);
   if (!s.init()) {
     Serial.printf("[tof] %s respondeu mas o init falhou\n", nome);
@@ -96,14 +96,14 @@ void tofBegin() {
   digitalWrite(PIN_TOF_R_XSHUT, LOW);
   delay(20);
 
-  if (!wire1Pronto) { Wire1.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000); wire1Pronto = true; }
+  if (!wire1Pronto) { Wire.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000); wire1Pronto = true; }
 
   // Teste de XSHUT: com os dois em reset o barramento tem que estar VAZIO.
   // Se alguem responder aqui, aquele XSHUT nao esta sendo controlado.
   uint8_t vivos = 0;
   for (uint8_t a = 1; a < 127; a++) {
-    Wire1.beginTransmission(a);
-    if (Wire1.endTransmission() == 0) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() == 0) {
       Serial.printf("[tof] 0x%02X responde com os dois XSHUT em reset\n", a);
       vivos++;
     }
@@ -124,7 +124,7 @@ void tofBegin() {
     digitalWrite(PIN_TOF_R_XSHUT, HIGH);
     delay(10);
     uint8_t addr = tofResponde(TOF_ADDR_R) ? TOF_ADDR_R : TOF_ADDR_L;
-    tofL.setBus(&Wire1);
+    tofL.setBus(&Wire);
     tofL.setTimeout(150);
     tofL.setAddress(addr);
     haveL = tofL.init();
@@ -188,7 +188,7 @@ void tofTask(void*) {
     if (haveL) {
       uint16_t mm = tofL.readRangeContinuousMillimeters();
       bool ok; int16_t cm = toCm(tofL, mm, ok);
-      T.tofRawL = ok ? (int16_t)mm : -1;
+      T.tofRawL = (int16_t)(mm > 32000 ? 32000 : mm);   // sempre o cru
       if (ok) T.tofFailL = 0; else if (T.tofFailL < 60000) T.tofFailL++;
       cmL = cm; T.distL = cm;
     }
@@ -197,7 +197,7 @@ void tofTask(void*) {
     if (haveR) {
       uint16_t mm = tofR.readRangeContinuousMillimeters();
       bool ok; int16_t cm = toCm(tofR, mm, ok);
-      T.tofRawR = ok ? (int16_t)mm : -1;
+      T.tofRawR = (int16_t)(mm > 32000 ? 32000 : mm);   // sempre o cru
       if (ok) T.tofFailR = 0; else if (T.tofFailR < 60000) T.tofFailR++;
       cmR = cm; T.distR = cm;
     }
@@ -556,14 +556,14 @@ void destravaBarramentos() {
   diagBusy = true;
   vTaskDelay(pdMS_TO_TICKS(40));
   Wire.end();
-  Wire1.end();
+  Wire.end();
   destrava(PIN_SDA,     PIN_SCL,     "OLED (21/22)");
   destrava(PIN_TOF_SDA, PIN_TOF_SCL, "olhos (16/17)");
   Wire.begin(PIN_SDA, PIN_SCL, 400000);
-  Wire1.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000);
+  Wire.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000);
   uint8_t tmp[8];
   scanBus(Wire,  "OLED depois de destravar",  tmp);
-  scanBus(Wire1, "olhos depois de destravar", tmp);
+  scanBus(Wire, "olhos depois de destravar", tmp);
   diagBusy = false;
   tofBegin();
 }
@@ -598,17 +598,18 @@ void selfTest() {
                   leBaixo ? "ALTO" : "baixo", leAlto ? "alto" : "BAIXO",
                   (!leBaixo && leAlto) ? "pino obedece" : "PINO NAO OBEDECE");
   }
-  DG.nOled = scanBus(Wire,  "I2C do OLED (SDA 21 / SCL 22)",   DG.aOled);
-  DG.nTof  = scanBus(Wire1, "I2C dos olhos (SDA 16 / SCL 17)", DG.aTof);
+  // Barramento unico: OLED e olhos dividem 21/22, entao uma varredura so
+  // responde pelos dois campos do painel.
+  DG.nOled = scanBus(Wire, "I2C unico - OLED e olhos (SDA 21 / SCL 22)", DG.aOled);
+  DG.nTof  = DG.nOled;
+  memcpy(DG.aTof, DG.aOled, sizeof(DG.aTof));
 
-  // A pergunta seguinte e eletrica, nao logica. Medimos SEMPRE os dois
-  // barramentos e mais um pino livre, porque uma medida sozinha nao diz
-  // se o instrumento esta funcionando: o barramento do OLED e o controle
-  // POSITIVO (sabemos que ha modulo la) e o GPIO 5, que este projeto nao
-  // usa, e o controle NEGATIVO. Se o pino livre acusar "pull-up externo",
-  // a sonda esta mentindo e nenhuma conclusao dela vale.
-  sondaLinhas(Wire1, PIN_TOF_SDA, PIN_TOF_SCL, "os olhos (16/17)");
-  sondaLinhas(Wire,  PIN_SDA,     PIN_SCL,     "o OLED (21/22) [controle +]");
+  // A pergunta seguinte e eletrica, nao logica. Com um barramento so, o
+  // controle POSITIVO de antes (o outro barramento) deixou de existir -
+  // resta o controle NEGATIVO, o GPIO 5, que este projeto nao usa. Ele
+  // continua sendo indispensavel: se um pino livre acusar "pull-up
+  // externo", a sonda esta mentindo e nenhuma conclusao dela vale.
+  sondaLinhas(Wire, PIN_SDA, PIN_SCL, "o barramento unico (21/22)");
   {
     SondaLinha c = amostraPino(5);
     Serial.printf("[teste] GPIO 5 livre [controle -]: solto=%u/32 alto, com pull=%u/32 -> %s\n",
@@ -658,30 +659,30 @@ void exameOlhos() {
   digitalWrite(PIN_TOF_L_XSHUT, LOW);
   digitalWrite(PIN_TOF_R_XSHUT, LOW);
   delay(25);
-  uint8_t nBaixo = scanBus(Wire1, "XSHUT em BAIXO (esperado: vazio)", tmp);
+  uint8_t nBaixo = scanBus(Wire, "XSHUT em BAIXO (esperado: vazio)", tmp);
 
   digitalWrite(PIN_TOF_L_XSHUT, HIGH);
   digitalWrite(PIN_TOF_R_XSHUT, HIGH);
   delay(25);
-  uint8_t nAlto = scanBus(Wire1, "XSHUT em ALTO (esperado: 0x29)", tmp);
+  uint8_t nAlto = scanBus(Wire, "XSHUT em ALTO (esperado: 0x29)", tmp);
 
   pinMode(PIN_TOF_L_XSHUT, INPUT);
   pinMode(PIN_TOF_R_XSHUT, INPUT);
   delay(25);
-  uint8_t nSolto = scanBus(Wire1, "XSHUT solto (pull-up do modulo)", tmp);
+  uint8_t nSolto = scanBus(Wire, "XSHUT solto (pull-up do modulo)", tmp);
 
-  Wire1.end();
-  Wire1.begin(PIN_TOF_SDA, PIN_TOF_SCL, 100000);
+  Wire.end();
+  Wire.begin(PIN_TOF_SDA, PIN_TOF_SCL, 100000);
   delay(10);
-  uint8_t nLento = scanBus(Wire1, "mesmos pinos, porem a 100 kHz", tmp);
+  uint8_t nLento = scanBus(Wire, "mesmos pinos, porem a 100 kHz", tmp);
 
-  Wire1.end();
-  Wire1.begin(PIN_TOF_SCL, PIN_TOF_SDA, 100000);      // de proposito ao contrario
+  Wire.end();
+  Wire.begin(PIN_TOF_SCL, PIN_TOF_SDA, 100000);      // de proposito ao contrario
   delay(10);
-  uint8_t nTrocado = scanBus(Wire1, "SDA/SCL TROCADOS (16 <-> 17)", tmp);
+  uint8_t nTrocado = scanBus(Wire, "SDA/SCL TROCADOS (21 <-> 22)", tmp);
 
-  Wire1.end();
-  Wire1.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000);
+  Wire.end();
+  Wire.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000);
 
   // Matriz de curtos entre os quatro pinos de I2C. Um curto entre SDA e
   // SCL deixa as duas linhas com pull-up (o do modulo alimenta as duas) e
@@ -689,26 +690,27 @@ void exameOlhos() {
   // ninguem responde". Aqui isso vira medida: puxo um pino para baixo e
   // vejo se algum outro desce junto. So descem juntos se estiverem ligados.
   {
-    const uint8_t pinos[4] = { PIN_TOF_SDA, PIN_TOF_SCL, PIN_SDA, PIN_SCL };
-    const char*   nomes[4] = { "16 SDA-olhos", "17 SCL-olhos", "21 SDA-OLED", "22 SCL-OLED" };
-    Wire1.end(); Wire.end();
+    // Com barramento unico sobraram DOIS pinos, nao quatro. Comparar um
+    // pino com ele mesmo acusaria "curto" sempre - foi o que aconteceu
+    // aqui na primeira execucao depois da mudanca, e o relatorio ficou
+    // dizendo que 21 estava em curto com 21 sob nomes diferentes.
+    const uint8_t pinos[2] = { PIN_SDA, PIN_SCL };
+    const char*   nomes[2] = { "21 SDA", "22 SCL" };
+    Wire.end();
     bool achou = false;
-    for (uint8_t i = 0; i < 4; i++) {
-      for (uint8_t j = 0; j < 4; j++) if (i != j) pinMode(pinos[j], INPUT_PULLUP);
+    for (uint8_t i = 0; i < 2; i++) {
+      uint8_t j = 1 - i;
+      pinMode(pinos[j], INPUT_PULLUP);
       pinMode(pinos[i], OUTPUT); digitalWrite(pinos[i], LOW);
       delayMicroseconds(800);
-      for (uint8_t j = 0; j < 4; j++) {
-        if (i == j) continue;
-        if (digitalRead(pinos[j]) == LOW) {
-          Serial.printf("[exame]   CURTO: %s esta ligado em %s\n", nomes[i], nomes[j]);
-          achou = true;
-        }
+      if (digitalRead(pinos[j]) == LOW) {
+        Serial.printf("[exame]   CURTO: %s esta ligado em %s\n", nomes[i], nomes[j]);
+        achou = true;
       }
       pinMode(pinos[i], INPUT);
     }
-    if (!achou) Serial.println("[exame]   sem curto entre os quatro pinos de I2C");
+    if (!achou) Serial.println("[exame]   sem curto entre SDA e SCL");
     Wire.begin(PIN_SDA, PIN_SCL, 400000);
-    Wire1.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000);
   }
 
   Serial.println("[exame] veredito:");
@@ -734,55 +736,6 @@ void exameOlhos() {
   tofBegin();
 }
 
-// ---------------------------------------------------------------------
-//  O Wire1 funciona?
-//
-//  Se um modulo responde no barramento do OLED (Wire, 21/22) e nao
-//  responde no dos olhos (Wire1, 16/17), sobram duas explicacoes opostas:
-//  os fios de 16/17, ou o proprio periferico Wire1. Este teste desempata
-//  colocando o Wire1 para falar NOS PINOS DO OLED. Se ele achar o
-//  dispositivo la, o Wire1 esta bom e a culpa e da fiacao de 16/17.
-//
-//  Precisa do modulo plugado em 21/22 no momento do teste.
-// ---------------------------------------------------------------------
-void testeWire1() {
-  diagBusy = true;
-  vTaskDelay(pdMS_TO_TICKS(40));
-  uint8_t tmp[8];
-  Serial.println("[wire1] --- o periferico Wire1 funciona? ---");
-
-  Wire.end();                       // libera 21/22 para o Wire1 usar
-  Wire1.end();
-  Wire1.begin(PIN_SDA, PIN_SCL, 100000);
-  delay(20);
-  uint8_t n = scanBus(Wire1, "Wire1 falando nos pinos do OLED (21/22)", tmp);
-
-  Wire1.end();
-  Wire1.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000);
-  Wire.begin(PIN_SDA, PIN_SCL, 400000);
-
-  if (n) Serial.println("[wire1] ACHOU: o periferico Wire1 esta bom. "
-                        "O que falha e a fiacao de 16/17.");
-  else   Serial.println("[wire1] NAO achou nem em 21/22: o problema esta no proprio "
-                        "Wire1, nao nos fios. (Confirme que o modulo esta em 21/22 agora.)");
-  Serial.println("[wire1] --- fim ---");
-  diagBusy = false;
-}
-
-
-// ---------------------------------------------------------------------
-//  I2C NA UNHA (bit-bang) - so para diagnostico
-//
-//  Ja sabemos que o periferico Wire1 funciona nos pinos 21/22 e que o
-//  modulo responde la. O que ninguem testou ainda e se DA para falar I2C
-//  nos pinos 16/17 com um dispositivo bom. Este scanner nao usa o
-//  periferico: chacoalha os pinos na mao. Se ele achar alguem em 16/17 e
-//  o Wire1 nao achar, o problema e do periferico/matriz de pinos e tem
-//  contorno em software. Se nem ele achar, os fios nao chegam no sensor.
-//
-//  As linhas sao dreno aberto de verdade: para nivel alto o pino e SOLTO
-//  (vira entrada com pull-up interno), nunca dirigido para 3V3. Assim o
-//  teste funciona mesmo sem pull-up externo e nao briga com o escravo.
 // ---------------------------------------------------------------------
 static uint8_t bbSDA, bbSCL;
 
@@ -843,24 +796,25 @@ void i2cNaUnha() {
   Serial.println("[unha] --- I2C na unha, sem o periferico ---");
 
   Wire.end();
-  Wire1.end();
 
-  uint8_t nOlhos = bbVarre(PIN_TOF_SDA, PIN_TOF_SCL, "os olhos");
-  uint8_t nOled  = bbVarre(PIN_SDA,     PIN_SCL,     "o OLED [controle +]");
+  uint8_t nBus  = bbVarre(PIN_SDA, PIN_SCL, "o barramento (21/22)");
+  // Controle negativo: dois pinos que este projeto nao usa. Nada pode
+  // responder ali. Se responder, o scanner na unha esta inventando ACK e
+  // o resultado de cima nao vale nada.
+  uint8_t nNada = bbVarre(5, 23, "GPIO 5 e 23, sem nada [controle -]");
 
   Wire.begin(PIN_SDA, PIN_SCL, 400000);
-  Wire1.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000);
 
   Serial.println("[unha] veredito:");
-  if (!nOled)
-    Serial.println("[unha]   o CONTROLE falhou: nem o OLED apareceu. O scanner na unha"
-                   " esta errado, entao o resultado dos olhos nao vale nada.");
-  else if (nOlhos)
-    Serial.println("[unha]   achou nos olhos SEM o periferico -> os fios estao bons e o"
-                   " problema e o Wire1 nesses pinos. Da para contornar em software.");
+  if (nNada)
+    Serial.println("[unha]   o CONTROLE NEGATIVO respondeu: o scanner na unha esta"
+                   " enxergando ACK onde nao ha ninguem. Ignore o resto.");
+  else if (nBus)
+    Serial.println("[unha]   achou na unha, sem o periferico -> os fios estao bons."
+                   " Se a Wire nao acha, o problema e temporizacao ou o periferico.");
   else
-    Serial.println("[unha]   controle OK e olhos mudos ate na unha -> os fios de 16/17 nao"
-                   " chegam no SDA/SCL do sensor. E fiacao, nao software.");
+    Serial.println("[unha]   controle limpo e barramento mudo ate na unha -> nao chega"
+                   " comunicacao no modulo. Confira VCC, GND comum e os dois fios.");
   Serial.println("[unha] --- fim ---");
   diagBusy = false;
   tofBegin();

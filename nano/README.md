@@ -35,7 +35,7 @@ ambiente próprio e os dois não se misturam.
 | **A0** | *livre* | nada — o módulo IR é de três fios (ver 1.1) |
 | **A1** | *livre* | idem, lado direito |
 | **A2** | Leitura de bateria | nó do divisor 100 k / 47 k |
-| **A3** | Botão ARMAR | botão para GND (pull-up interno) |
+| **A3** | *livre* | o botão de armar saiu do projeto |
 | **A4** | **SDA** | OLED **e** os dois VL53L0X |
 | **A5** | **SCL** | OLED **e** os dois VL53L0X |
 | **A6** | *sonda* — `VCC` do módulo ToF | só diagnóstico, tecla `k` |

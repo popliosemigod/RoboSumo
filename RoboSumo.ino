@@ -205,6 +205,8 @@ void pollSerialCmd() {
       case 'w': Sens::testeWire1(); break;
       case 'f': rajadaIR(); break;
       case 'i': Sens::i2cNaUnha(); break;
+      case 'k': Sens::sondaModulo(); break;
+      case 'u': Sens::destravaBarramentos(); break;
       case 'a':
         if (T.armed) Brain::disarm(); else Brain::arm();
         break;
@@ -213,6 +215,8 @@ void pollSerialCmd() {
         Serial.println("[cmd] d=capturar ESCURO  c=capturar CLARO  x=zerar calibracao");
         Serial.println("[cmd] m=monitor de IR a 20 Hz  o=monitor dos OLHOS a 20 Hz");
         Serial.println("[cmd] e=exame dos olhos (XSHUT, velocidade, pinos trocados)");
+        Serial.println("[cmd] k=mede VCC/GND NO PINO do modulo (GPIO 32 e 33)");
+        Serial.println("[cmd] u=destrava os dois barramentos I2C e varre");
         break;
       default: break;                     // ignora quebra de linha e digitacao solta
     }

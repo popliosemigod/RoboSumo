@@ -477,6 +477,97 @@ static uint8_t scanBus(TwoWire& bus, const char* nome, uint8_t* out) {
   return n;
 }
 
+// ---------------------------------------------------------------------
+//  O QUE O NANO ENSINOU - dois instrumentos que voltam para ca
+//
+//  A regressao para Arduino Nano achou a causa raiz dos olhos mudos, e
+//  ela nao estava em nenhum lugar onde se procurou aqui: o GND do modulo
+//  VL53L0X nao estava no terra comum. Os pinos do modulo flutuavam, o
+//  chip recebia 0,49 V entre eles e se alimentava pelos diodos de
+//  protecao das linhas de I2C. Meio volt da para puxar SDA no instante
+//  do ACK e nao da para mais nada - por isso ele respondia em endereco
+//  errado, nao devolvia registrador e ignorava o XSHUT.
+//
+//  Nenhum teste feito de dentro do barramento separa isso, porque o
+//  modulo parasitado responde. So medindo a alimentacao NO PINO DELE.
+// ---------------------------------------------------------------------
+
+// GPIO 32 e 33 nasceram no projeto como "AO dos modulos IR". Aquela
+// entrada nunca existiu - o modulo e de tres fios - entao os dois pinos
+// estavam sobrando. Sao ADC1, os unicos que funcionam com o Wi-Fi ligado.
+#define PIN_SONDA_VCC  PIN_IR_L_A   // 32 - ligar no VCC do modulo ToF
+#define PIN_SONDA_GND  PIN_IR_R_A   // 33 - ligar no GND do modulo ToF
+
+void sondaModulo() {
+  Serial.println("[volt] --- tensao NO PINO do modulo ToF ---");
+  analogSetPinAttenuation(PIN_SONDA_VCC, ADC_11db);
+  analogSetPinAttenuation(PIN_SONDA_GND, ADC_11db);
+
+  uint32_t sv = 0, sg = 0;
+  for (uint8_t i = 0; i < 16; i++) {
+    sv += analogReadMilliVolts(PIN_SONDA_VCC);
+    sg += analogReadMilliVolts(PIN_SONDA_GND);
+    delay(2);
+  }
+  uint16_t mvV = sv / 16, mvG = sg / 16;
+
+  Serial.printf("[volt] GPIO %d (VCC do modulo) = %u mV\n", PIN_SONDA_VCC, mvV);
+  Serial.printf("[volt] GPIO %d (GND do modulo) = %u mV\n", PIN_SONDA_GND, mvG);
+  Serial.printf("[volt] diferenca real sobre o chip = %d mV\n", (int)mvV - (int)mvG);
+
+  if (mvG > 150)
+    Serial.println("[volt]   GND do modulo FORA do terra comum. E este o defeito:"
+                   " sem terra comum nao existe nivel logico, existe deriva.");
+  else if ((int)mvV - (int)mvG < 2600)
+    Serial.println("[volt]   terra ok, mas a tensao sobre o chip esta baixa demais:"
+                   " fio de VCC partido, ou fonte afundando.");
+  else
+    Serial.println("[volt]   alimentacao correta no pino do modulo.");
+  Serial.println("[volt] --- fim ---");
+}
+
+// Escravo interrompido no meio de um byte fica segurando SDA em baixo, e
+// nesse estado a varredura mostra o barramento VAZIO - nao "com defeito",
+// vazio, como se nada estivesse ligado. Reiniciar a ESP32 nao resolve:
+// quem esta travado e o outro lado. A cura e a da norma I2C: pulsar SCL
+// ate o escravo terminar o byte, e fechar com um STOP.
+static bool destrava(uint8_t sda, uint8_t scl, const char* nome) {
+  pinMode(sda, INPUT_PULLUP);
+  pinMode(scl, INPUT_PULLUP);
+  delayMicroseconds(20);
+  if (digitalRead(sda)) return true;
+
+  Serial.printf("[i2c] %s: SDA presa em BAIXO, pulsando SCL\n", nome);
+  for (uint8_t i = 0; i < 18 && !digitalRead(sda); i++) {
+    pinMode(scl, OUTPUT); digitalWrite(scl, LOW); delayMicroseconds(10);
+    pinMode(scl, INPUT_PULLUP);                   delayMicroseconds(10);
+  }
+  pinMode(sda, OUTPUT); digitalWrite(sda, LOW); delayMicroseconds(10);   // STOP
+  pinMode(scl, INPUT_PULLUP);                   delayMicroseconds(10);
+  pinMode(sda, INPUT_PULLUP);                   delayMicroseconds(10);
+
+  bool livre = digitalRead(sda);
+  Serial.printf("[i2c] %s: %s\n", nome,
+                livre ? "liberado" : "SDA CONTINUA baixa - e curto para GND, nao travamento");
+  return livre;
+}
+
+void destravaBarramentos() {
+  diagBusy = true;
+  vTaskDelay(pdMS_TO_TICKS(40));
+  Wire.end();
+  Wire1.end();
+  destrava(PIN_SDA,     PIN_SCL,     "OLED (21/22)");
+  destrava(PIN_TOF_SDA, PIN_TOF_SCL, "olhos (16/17)");
+  Wire.begin(PIN_SDA, PIN_SCL, 400000);
+  Wire1.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000);
+  uint8_t tmp[8];
+  scanBus(Wire,  "OLED depois de destravar",  tmp);
+  scanBus(Wire1, "olhos depois de destravar", tmp);
+  diagBusy = false;
+  tofBegin();
+}
+
 void selfTest() {
   diagBusy = true;
   vTaskDelay(pdMS_TO_TICKS(40));      // deixa terminar o quadro do OLED em curso

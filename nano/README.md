@@ -32,13 +32,19 @@ ambiente próprio e os dois não se misturam.
 
 | Pino | Função | Ligar em |
 |------|--------|----------|
-| **A0** | *livre* | só se o módulo IR tiver saída `AO` (ver 1.1) |
+| **A0** | *livre* | nada — o módulo IR é de três fios (ver 1.1) |
 | **A1** | *livre* | idem, lado direito |
 | **A2** | Leitura de bateria | nó do divisor 100 k / 47 k |
 | **A3** | Botão ARMAR | botão para GND (pull-up interno) |
 | **A4** | **SDA** | OLED **e** os dois VL53L0X |
 | **A5** | **SCL** | OLED **e** os dois VL53L0X |
-| A6, A7 | livres | só entrada analógica, sem função digital |
+| **A6** | *sonda* — `VCC` do módulo ToF | só diagnóstico, tecla `k` |
+| **A7** | *sonda* — `GND` do módulo ToF | só diagnóstico, tecla `k` |
+
+A6 e A7 são as únicas entradas **só analógicas** do Nano: não têm função
+digital e não serviriam para mais nada. Por isso viraram voltímetro. São
+**sondas de alta impedância** — leem tensão, não alimentam nada. Podem sair
+quando o barramento estiver fechado.
 
 ### 1.1 Módulo IR de três fios — o caso deste projeto
 

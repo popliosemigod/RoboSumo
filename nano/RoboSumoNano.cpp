@@ -200,19 +200,40 @@ static bool tofResponde(uint8_t addr) {
   return (Wire.read() == 0xEE);
 }
 
+// XSHUT em DRENO ABERTO - nunca dirigido para 5 V.
+//
+// SDA e SCL sao dreno aberto por construcao: o TWI do AVR so puxa a
+// linha para baixo, e quem a levanta e resistor. XSHUT nao seria: um
+// digitalWrite(HIGH) e um driver push-pull de dezenas de mA empurrando
+// 5 V no pino de um sensor cujo maximo e 3,6 V (Tab. 6), contra o diodo
+// de protecao dele. E o unico ponto do desenho capaz de matar o modulo.
+//
+// Entao XSHUT passa a ser tratado como as linhas de I2C: para desligar
+// o sensor o pino vai a BAIXO; para ligar, o pino e SOLTO (entrada em
+// alta impedancia) e quem sobe a linha e o pull-up do proprio modulo -
+// ou um 10 k externo para o 3V3, se o modulo nao tiver o seu.
+static inline void xshutBaixo(uint8_t pino) {
+  pinMode(pino, OUTPUT);
+  digitalWrite(pino, LOW);
+}
+static inline void xshutSolta(uint8_t pino) {
+  digitalWrite(pino, LOW);        // PORT em 0: entrada SEM pull-up interno
+  pinMode(pino, INPUT);           // alta impedancia; o modulo e quem sobe
+}
+
 static bool sobe(VL53L0X& s, uint8_t xshut, uint8_t addr, const __FlashStringHelper* nome) {
-  digitalWrite(xshut, HIGH);
+  xshutSolta(xshut);
   delay(10);                                  // t_BOOT e 1,2 ms max
   if (!tofResponde(TOF_ADDR_R)) {
     Serial.print(F("[tof] ")); Serial.print(nome);
     Serial.println(F(" NAO respondeu (0xC0 != 0xEE)"));
-    digitalWrite(xshut, LOW);
+    xshutBaixo(xshut);
     return false;
   }
   s.setTimeout(150);
   if (!s.init()) {
     Serial.print(F("[tof] ")); Serial.print(nome); Serial.println(F(" init falhou"));
-    digitalWrite(xshut, LOW);
+    xshutBaixo(xshut);
     return false;
   }
   if (addr != TOF_ADDR_R) s.setAddress(addr);
@@ -224,10 +245,8 @@ static bool sobe(VL53L0X& s, uint8_t xshut, uint8_t addr, const __FlashStringHel
 }
 
 void tofBegin() {
-  pinMode(PIN_TOF_L_XSHUT, OUTPUT);
-  pinMode(PIN_TOF_R_XSHUT, OUTPUT);
-  digitalWrite(PIN_TOF_L_XSHUT, LOW);
-  digitalWrite(PIN_TOF_R_XSHUT, LOW);
+  xshutBaixo(PIN_TOF_L_XSHUT);
+  xshutBaixo(PIN_TOF_R_XSHUT);
   delay(20);
 
   // Com os dois em reset o barramento nao pode ter nenhum 0x29. Se tiver,
@@ -242,7 +261,8 @@ void tofBegin() {
 
   if (haveL && haveR)      Serial.println(F("[tof] dois olhos: mira por triangulacao"));
   else if (haveL || haveR) Serial.println(F("[tof] MODO CAOLHO: avanca reto no alvo"));
-  else                     Serial.println(F("[tof] NENHUM olho - confira SDA/SCL/VIN"));
+  else                     Serial.println(F("[tof] NENHUM olho - se o XSHUT nao tiver pull-up"
+                                                 " no modulo, poe 10 k dele para o 3V3"));
 }
 
 static int16_t paraCm(VL53L0X& s, uint16_t mm) {
@@ -322,13 +342,18 @@ void begin() {
 // ---------------------------------------------------------------------
 //  AUTOTESTE E INSTRUMENTOS DE BANCADA
 // ---------------------------------------------------------------------
+static bool viu29 = false, viu3C = false;
+
 static uint8_t varreI2C() {
   Serial.print(F("[teste] varrendo I2C (A4/A5):"));
   uint8_t n = 0;
+  viu29 = viu3C = false;
   for (uint8_t a = 1; a < 127; a++) {
     Wire.beginTransmission(a);
     if (Wire.endTransmission() == 0) {
       Serial.print(F(" 0x")); Serial.print(a, HEX); n++;
+      if (a == 0x29) viu29 = true;
+      if (a == 0x3C) viu3C = true;
     }
   }
   if (!n) Serial.print(F("  NENHUM DISPOSITIVO"));
@@ -409,10 +434,20 @@ static void identifica(uint8_t addr) {
   Serial.println(ok ? F("-> VL53L0X confirmado") : F("-> NAO e um VL53L0X"));
 }
 
+// Interroga TODO mundo que da ACK, nao so os enderecos que se espera.
+// Enquanto o barramento devolver endereco inesperado, perguntar so nos
+// dois enderecos previstos e ficar sem resposta e o pior dos mundos: nao
+// se descobre nem quem esta la.
 void identificaOlhos() {
-  Serial.println(F("[id] --- identidade dos olhos (Tab. 4: EE AA 10) ---"));
-  identifica(TOF_ADDR_L);
-  identifica(TOF_ADDR_R);
+  Serial.println(F("[id] --- identidade de QUEM responde (Tab. 4: EE AA 10) ---"));
+  uint8_t achados = 0;
+  for (uint8_t a = 1; a < 127; a++) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() != 0) continue;
+    achados++;
+    identifica(a);
+  }
+  if (!achados) Serial.println(F("[id] ninguem deu ACK no barramento"));
   Serial.println(F("[id] --- fim ---"));
 }
 
@@ -420,19 +455,251 @@ void identificaOlhos() {
 // causas que a varredura simples nao separa.
 void exameOlhos() {
   Serial.println(F("[exame] --- exame dos olhos ---"));
-  pinMode(PIN_TOF_L_XSHUT, OUTPUT); pinMode(PIN_TOF_R_XSHUT, OUTPUT);
 
-  digitalWrite(PIN_TOF_L_XSHUT, LOW); digitalWrite(PIN_TOF_R_XSHUT, LOW);
+  Sens::xshutBaixo(PIN_TOF_L_XSHUT); Sens::xshutBaixo(PIN_TOF_R_XSHUT);
   delay(25); Serial.print(F("[exame] XSHUT BAIXO (esperado vazio):")); varreI2C();
 
-  digitalWrite(PIN_TOF_L_XSHUT, HIGH); digitalWrite(PIN_TOF_R_XSHUT, HIGH);
-  delay(25); Serial.print(F("[exame] XSHUT ALTO (esperado 0x29):")); varreI2C();
-
-  pinMode(PIN_TOF_L_XSHUT, INPUT); pinMode(PIN_TOF_R_XSHUT, INPUT);
-  delay(25); Serial.print(F("[exame] XSHUT SOLTO (pull-up do modulo):")); varreI2C();
+  // Nao existe mais etapa "XSHUT em ALTO": dirigir 5 V no pino do sensor
+  // e justamente o que este firmware evita. Soltar o pino cobre o mesmo
+  // caso - se o modulo tem pull-up, ele sobe sozinho.
+  Sens::xshutSolta(PIN_TOF_L_XSHUT); Sens::xshutSolta(PIN_TOF_R_XSHUT);
+  delay(25); Serial.print(F("[exame] XSHUT SOLTO (esperado 0x29):")); varreI2C();
+  Serial.println(F("[exame] vazio aqui e sinal de XSHUT sem pull-up: 10 k para o 3V3"));
 
   Serial.println(F("[exame] --- fim; reinicializando ---"));
   Sens::tofBegin();
+}
+
+// ---------------------------------------------------------------------
+//  DESTRAVAR O BARRAMENTO
+//
+//  Se um escravo for interrompido no meio de um byte - leitura abortada,
+//  reset do mestre com a transacao aberta, queda de alimentacao - ele
+//  fica segurando SDA em baixo esperando os clocks que nunca vieram.
+//  Nesse estado nenhum START e possivel e a varredura mostra o
+//  barramento inteiro vazio, como se nada estivesse ligado. Reiniciar o
+//  Arduino nao resolve: quem esta travado e o escravo.
+//
+//  A saida esta na propria norma I2C: pulsar SCL ate o escravo terminar
+//  o byte e soltar SDA, e entao emitir um STOP para fechar a transacao.
+// ---------------------------------------------------------------------
+static bool liberaBarramento() {
+  pinMode(A4, OUTPUT); digitalWrite(A4, LOW); pinMode(A4, INPUT);   // PORT=0, sem pull-up
+  pinMode(A5, OUTPUT); digitalWrite(A5, LOW); pinMode(A5, INPUT);
+  delayMicroseconds(20);
+  if (digitalRead(A4)) return true;                                 // ja estava livre
+
+  Serial.println(F("[i2c] SDA presa em BAIXO - pulsando SCL para destravar"));
+  for (uint8_t i = 0; i < 18 && !digitalRead(A4); i++) {
+    pinMode(A5, OUTPUT); delayMicroseconds(10);                     // SCL baixo
+    pinMode(A5, INPUT);  delayMicroseconds(10);                     // SCL solto
+  }
+  pinMode(A4, OUTPUT); delayMicroseconds(10);                       // STOP: SDA baixo,
+  pinMode(A5, INPUT);  delayMicroseconds(10);                       // SCL sobe,
+  pinMode(A4, INPUT);  delayMicroseconds(10);                       // SDA sobe depois
+
+  bool livre = digitalRead(A4);
+  Serial.println(livre ? F("[i2c] barramento liberado")
+                       : F("[i2c] SDA CONTINUA baixa: nao e escravo travado, e curto para GND"));
+  return livre;
+}
+
+// ---------------------------------------------------------------------
+//  NIVEL DE REPOUSO DO BARRAMENTO - o multimetro feito em firmware
+//
+//  A4 e A5 sao canais do ADC. Com o TWI desligado, medir a tensao em que
+//  a linha descansa responde a mesma pergunta do multimetro: existe
+//  pull-up, e ele referencia qual trilho? Referencia do ADC = AVcc,
+//  entao 1023 corresponde a 5,00 V.
+//
+//  Depois vem a comparacao que decide: varrer sem pull-up interno e
+//  varrer com ele. O pull-up interno do AVR tem 20 a 50 k para 5 V - com
+//  o sensor em 3,3 V isso injeta ~40 uA no diodo de protecao dele, coisa
+//  que nenhum datasheet chama de estresse. O que mata sensor e driver
+//  push-pull, nao 40 uA por dois segundos.
+// ---------------------------------------------------------------------
+static uint16_t mvPino(uint8_t pino) {
+  pinMode(pino, INPUT);                 // INPUT puro: sem pull-up interno
+  delayMicroseconds(500);
+  analogRead(pino);                     // descarta a primeira: troca de mux
+  uint32_t soma = 0;
+  for (uint8_t i = 0; i < 16; i++) { soma += analogRead(pino); delayMicroseconds(200); }
+  return (uint16_t)((soma / 16UL) * 5000UL / 1023UL);
+}
+
+static void diagnosticaNivel(const __FlashStringHelper* nome, uint16_t mv) {
+  Serial.print(F("[nivel] ")); Serial.print(nome);
+  Serial.print(F(" = ")); Serial.print(mv); Serial.print(F(" mV -> "));
+  if (mv < 500)       Serial.println(F("SEM pull-up nenhum: a linha nao sobe, I2C impossivel"));
+  else if (mv < 2400) Serial.println(F("nivel estranho, algo esta puxando a linha para baixo"));
+  else if (mv < 3050) Serial.println(F("pull-up para ~2,8 V (regulador do modulo, sem conversor)"));
+  else if (mv < 3900) Serial.println(F("pull-up para ~3,3 V - dentro do limite do sensor"));
+  else                Serial.println(F("pull-up para ~5 V: ha conversor de nivel, ou o 5 V chega cru"));
+}
+
+void sondaNivelI2C() {
+  Serial.println(F("[nivel] --- nivel de repouso de A4/A5 ---"));
+  Wire.end();
+  delay(5);
+  uint16_t sda = mvPino(A4);
+  uint16_t scl = mvPino(A5);
+  diagnosticaNivel(F("SDA(A4)"), sda);
+  diagnosticaNivel(F("SCL(A5)"), scl);
+
+  Wire.begin();
+  digitalWrite(SDA, LOW); digitalWrite(SCL, LOW);     // pull-up interno DESLIGADO
+  Wire.setClock(100000L);
+  delay(5);
+  Serial.print(F("[nivel] SEM pull-up interno ->"));
+  uint8_t nSem = varreI2C();
+  bool okSem = viu29 || viu3C;
+
+  digitalWrite(SDA, HIGH); digitalWrite(SCL, HIGH);   // pull-up interno LIGADO (5 V, ~30 k)
+  delay(5);
+  Serial.print(F("[nivel] COM pull-up interno ->"));
+  uint8_t nCom = varreI2C();
+  bool okCom = viu29 || viu3C;
+
+  digitalWrite(SDA, LOW); digitalWrite(SCL, LOW);     // volta ao estado seguro
+  delay(5);
+
+  Serial.println(F("[nivel] veredito:"));
+  if (!nSem && !nCom)
+    Serial.println(F("[nivel]   mudo dos dois jeitos: e fiacao ou alimentacao, nao pull-up"));
+  else if (!okSem && okCom)
+    Serial.println(F("[nivel]   so fecha com o pull-up interno -> falta pull-up externo."
+                     " Poe 4k7 de SDA e de SCL para o 3V3 e o barramento fica em spec"));
+  else if (okSem)
+    Serial.println(F("[nivel]   barramento fecha sem ajuda: pull-up externo esta bom"));
+  else
+    Serial.println(F("[nivel]   endereco ERRADO com e sem pull-up extra. Pull-up nao e a causa."
+                     " Rode v (velocidades) e w (na unha): se o endereco nao mudar, sobra GND"
+                     " comum e alimentacao do modulo"));
+
+  Serial.println(F("[nivel] --- fim; reinicializando os olhos ---"));
+  Sens::tofBegin();
+}
+
+// ---------------------------------------------------------------------
+//  VARREDURA EM VARIAS VELOCIDADES
+//
+//  Endereco encontrado que nao e o esperado tem duas explicacoes opostas:
+//  ou existe mesmo um dispositivo ali, ou a borda de subida esta lenta e
+//  o ACK que o mestre "viu" era so a linha ainda nao ter subido. As duas
+//  se separam sozinhas ao mudar a velocidade: dispositivo de verdade
+//  responde no mesmo endereco em qualquer clock; artefato de borda anda
+//  ou some quando o clock afrouxa.
+//
+//  Abaixo de ~31 kHz nao da: o TWBR do AVR satura em 255 e a Wire nao
+//  mexe no prescaler.
+// ---------------------------------------------------------------------
+void varreVelocidades() {
+  static const uint32_t vel[] = {400000UL, 200000UL, 100000UL, 50000UL, 31000UL};
+  Serial.println(F("[vel] --- varredura por velocidade ---"));
+  for (uint8_t i = 0; i < 5; i++) {
+    Wire.setClock(vel[i]);
+    delay(10);
+    Serial.print(F("[vel] ")); Serial.print(vel[i] / 1000); Serial.print(F(" kHz "));
+    varreI2C();
+  }
+  Wire.setClock(100000L);
+  Serial.println(F("[vel] mesmo endereco em toda velocidade = dispositivo real"));
+  Serial.println(F("[vel] endereco que muda ou some = artefato de borda lenta"));
+  Serial.println(F("[vel] --- fim ---"));
+}
+
+// ---------------------------------------------------------------------
+//  I2C NA UNHA, NAS DUAS ORIENTACOES
+//
+//  0x28 e 0x38 aparecem iguais de 31 a 400 kHz: nao e borda lenta, e
+//  resposta repetivel. Resposta repetivel em endereco errado tem uma
+//  causa classica: SDA e SCL trocados. O escravo entao decodifica lixo
+//  deterministico e da ACK em endereco que nao e o dele.
+//
+//  No AVR o periferico TWI e preso em A4/A5 e nao da para inverter por
+//  software. Na unha da: aqui as duas linhas sao chacoalhadas a mao, e a
+//  varredura roda nas duas orientacoes. Se uma delas achar 0x29 ou 0x3C,
+//  os fios estao invertidos - e a correcao e trocar dois jumpers.
+//
+//  As linhas sao dreno aberto de verdade: para subir, o pino e SOLTO
+//  (entrada sem pull-up interno) e quem levanta e o pull-up de 3,3 V do
+//  modulo. Nunca se dirige 5 V para a linha.
+// ---------------------------------------------------------------------
+static uint8_t bbSDA, bbSCL;
+
+static inline void bbSolta(uint8_t p) { pinMode(p, INPUT); }
+static inline void bbBaixo(uint8_t p) { pinMode(p, OUTPUT); digitalWrite(p, LOW); }
+static inline void bbPausa() { delayMicroseconds(10); }      // ~50 kHz
+
+static bool bbEscreveByte(uint8_t v) {
+  for (uint8_t i = 0; i < 8; i++) {
+    if (v & 0x80) bbSolta(bbSDA); else bbBaixo(bbSDA);
+    v <<= 1;
+    bbPausa();
+    bbSolta(bbSCL); bbPausa();
+    bbBaixo(bbSCL); bbPausa();
+  }
+  bbSolta(bbSDA); bbPausa();          // solta para o escravo responder
+  bbSolta(bbSCL); bbPausa();
+  bool ack = (digitalRead(bbSDA) == LOW);
+  bbBaixo(bbSCL); bbPausa();
+  return ack;
+}
+
+static uint8_t bbVarre(uint8_t sda, uint8_t scl) {
+  bbSDA = sda; bbSCL = scl;
+  bbSolta(bbSDA); bbSolta(bbSCL);
+  delayMicroseconds(200);
+  uint8_t achados = 0;
+  viu29 = viu3C = false;
+  for (uint8_t a = 1; a < 127; a++) {
+    bbSolta(bbSDA); bbSolta(bbSCL); bbPausa();     // inicio
+    bbBaixo(bbSDA); bbPausa();
+    bbBaixo(bbSCL); bbPausa();
+    bool ack = bbEscreveByte((uint8_t)(a << 1));
+    bbBaixo(bbSDA); bbPausa();                     // fim
+    bbSolta(bbSCL); bbPausa();
+    bbSolta(bbSDA); bbPausa();
+    if (ack) {
+      Serial.print(F(" 0x")); Serial.print(a, HEX); achados++;
+      if (a == 0x29) viu29 = true;
+      if (a == 0x3C) viu3C = true;
+    }
+  }
+  if (!achados) Serial.print(F(" NENHUM"));
+  Serial.println();
+  bbSolta(sda); bbSolta(scl);
+  return achados;
+}
+
+void varreNaUnha() {
+  Serial.println(F("[unha] --- I2C na unha, sem o periferico ---"));
+  Wire.end();
+  delay(5);
+
+  Serial.print(F("[unha] normal   (SDA=A4, SCL=A5):"));
+  bbVarre(A4, A5);
+  bool okNormal = viu29 || viu3C;
+
+  Serial.print(F("[unha] TROCADOS (SDA=A5, SCL=A4):"));
+  bbVarre(A5, A4);
+  bool okTrocado = viu29 || viu3C;
+
+  Serial.println(F("[unha] veredito:"));
+  if (okTrocado && !okNormal)
+    Serial.println(F("[unha]   SDA e SCL estao INVERTIDOS. SDA do modulo vai em A4 e"
+                     " SCL em A5 - troque os dois jumpers"));
+  else if (okNormal)
+    Serial.println(F("[unha]   fiacao certa: na unha o barramento fecha. O problema esta"
+                     " no periferico TWI ou na temporizacao da Wire"));
+  else
+    Serial.println(F("[unha]   nenhuma orientacao acha 0x29 nem 0x3C. Sobra alimentacao do"
+                     " modulo, GND comum, ou modulo que nao e o que se pensa"));
+
+  Wire.begin();
+  digitalWrite(SDA, LOW); digitalWrite(SCL, LOW);
+  Wire.setClock(100000L);
+  Serial.println(F("[unha] --- fim ---"));
 }
 
 // ---------------------------------------------------------------------
@@ -655,6 +922,10 @@ uint32_t monAte = 0;
 void ajuda() {
   Serial.println(F("[cmd] a=armar/parar  s=autoteste  e=exame dos olhos"));
   Serial.println(F("[cmd] i=identidade dos olhos (confirma que E um VL53L0X)"));
+  Serial.println(F("[cmd] u=nivel do barramento em mV e teste de pull-up"));
+  Serial.println(F("[cmd] v=varre o I2C em 5 velocidades (separa artefato de dispositivo)"));
+  Serial.println(F("[cmd] w=varre na unha nas duas orientacoes (pega SDA/SCL trocados)"));
+  Serial.println(F("[cmd] x=destrava o barramento (escravo segurando SDA) e varre"));
   Serial.println(F("[cmd] b=buzzer  m=monitor 20Hz por 10s  p=ajustar trimpot do IR"));
   Serial.println(F("[cmd] 1/2/3=modo NORMAL/LESMA/CAPIROTO  ?=ajuda"));
 }
@@ -666,6 +937,10 @@ void console() {
       case 's': autoteste(); break;
       case 'e': exameOlhos(); break;
       case 'i': identificaOlhos(); break;
+      case 'u': sondaNivelI2C(); break;
+      case 'v': varreVelocidades(); break;
+      case 'w': varreNaUnha(); break;
+      case 'x': liberaBarramento(); varreI2C(); break;
       case 'b': Snd::beep(1500, 150); break;
       case 'm': monAte = millis() + 10000; Serial.println(F("#MONINI")); break;
       case 'p':                                  // ajuste do trimpot
@@ -694,8 +969,25 @@ void setup() {
   Mot::begin();
   Serial.println(F("[boot] motores prontos (dormindo)"));
 
+  liberaBarramento();
+
   Wire.begin();
-  Wire.setClock(400000L);
+  // A biblioteca Wire liga os pull-up internos do AVR, e eles puxam para
+  // 5 V. Com sensor alimentado em 3,3 V isso deixaria o barramento em
+  // repouso acima do limite dele. Desligando aqui, quem levanta a linha
+  // passa a ser o pull-up do modulo - que referencia o 3V3.
+  digitalWrite(SDA, LOW);
+  digitalWrite(SCL, LOW);
+  // 100 kHz enquanto a linha sobe so pelo pull-up fraco do modulo: em
+  // 400 kHz a borda de subida pode nao fechar a tempo. Volta a 400 k
+  // quando houver pull-up externo de 4k7 para o 3V3.
+  Wire.setClock(100000L);
+
+  // Sem isto a Wire do AVR espera PARA SEMPRE por um barramento travado,
+  // e o robo simplesmente para de existir no meio de uma luta. Ja
+  // aconteceu aqui na bancada: um escravo deu ACK e segurou a linha.
+  // 25 ms e o segundo argumento reinicia o TWI quando estoura.
+  Wire.setWireTimeout(25000UL, true);
 
 #if USAR_OLED
   Face::begin();

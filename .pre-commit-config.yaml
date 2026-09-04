@@ -1,0 +1,26 @@
+# Ganchos que rodam ANTES do commit entrar no historico.
+# Instalar uma vez por clone:
+#     pip install pre-commit commitizen
+#     pre-commit install --hook-type pre-commit --hook-type commit-msg
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict      # barra "<<<<<<<" esquecido no codigo
+      - id: check-yaml
+      - id: check-toml
+      - id: check-case-conflict       # Windows vs Linux: Config.h != config.h
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Valida a MENSAGEM do commit contra o Conventional Commits.
+  # E o que mantem o CHANGELOG e o `cz bump` funcionando.
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.1.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]

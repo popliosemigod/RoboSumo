@@ -1,0 +1,42 @@
+# ---- PlatformIO -----------------------------------------------------
+.pio/
+.pioenvs/
+.piolibdeps/
+.clang_complete
+.gcc-flags.json
+compile_commands.json
+
+# ---- Arduino IDE ----------------------------------------------------
+build/
+*.hex
+*.elf
+*.bin
+*.map
+*.d
+*.o
+
+# ---- VSCode ---------------------------------------------------------
+# O .vscode e versionado so no que ajuda o time; o resto e local.
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
+
+# ---- Python (pre-commit / commitizen) -------------------------------
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# ---- Notas de trabalho ----------------------------------------------
+# Estado da bancada, pendencias e armadilhas ja encontradas. Fica fora do
+# git de proposito: e caderno de sessao, muda toda hora e nao interessa a
+# quem clona o repositorio. Recarregar no comeco de cada sessao.
+CONTEXTO.md
+
+# ---- Sistema --------------------------------------------------------
+Thumbs.db
+desktop.ini
+.DS_Store
+*.swp
+*~

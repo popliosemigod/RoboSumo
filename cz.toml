@@ -1,0 +1,16 @@
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "v$version"
+version_scheme = "semver"
+version = "1.0.0"
+
+# O commitizen reescreve a versao aqui a cada `cz bump`, entao o firmware
+# sempre sabe qual versao dele esta rodando - aparece no boot, no OLED e
+# no painel web. Sem isso, "qual firmware esta nessa placa?" vira chute.
+version_files = [
+    "version.h:FW_VERSION",
+]
+
+update_changelog_on_bump = true
+changelog_file = "CHANGELOG.md"
+major_version_zero = false

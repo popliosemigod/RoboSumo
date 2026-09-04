@@ -1,0 +1,20 @@
+* text=auto eol=lf
+
+*.h    text
+*.ino  text
+*.md   text
+*.yml  text
+*.yaml text
+*.toml text
+*.ini  text
+
+# Scripts do Windows precisam de CRLF para o PowerShell nao reclamar.
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Binarios: nunca normalizar.
+*.bin  binary
+*.png  binary
+*.jpg  binary
+*.pdf  binary

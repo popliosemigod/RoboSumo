@@ -65,22 +65,41 @@ static bool configura(VL53L0X& s) {
   return true;
 }
 
-static bool bringUp(VL53L0X& s, uint8_t xshut, uint8_t addr, const char* nome) {
-  digitalWrite(xshut, HIGH);          // solta o reset deste sensor
-  delay(10);                          // t_BOOT e 1,2 ms max (§2.9.1)
+// O init() do VL53L0X nao e uma escrita: sao dezenas de acessos I2C em
+// sequencia, e basta um falhar para ele devolver false com o sensor
+// perfeitamente vivo. Na bancada isso apareceu de forma intermitente
+// assim que o OLED entrou no mesmo barramento - um boot subia os dois
+// olhos, o seguinte dizia "respondeu mas o init falhou" no direito.
+//
+// Por isso a subida tem tres tentativas, cada uma com um reset de
+// verdade pelo XSHUT no meio. Desistir na primeira custaria um olho e a
+// triangulacao inteira por causa de um unico acesso perdido.
+#define TOF_TENTATIVAS 3
 
-  if (!tofResponde(TOF_ADDR_R)) {
-    Serial.printf("[tof] %s NAO respondeu (0xC0 != 0xEE)\n", nome);
-    digitalWrite(xshut, LOW);         // desliga p/ nao atrapalhar o outro
-    return false;
+static bool bringUp(VL53L0X& s, uint8_t xshut, uint8_t addr, const char* nome) {
+  for (uint8_t tent = 1; tent <= TOF_TENTATIVAS; tent++) {
+    digitalWrite(xshut, LOW);         // reset limpo antes de cada tentativa
+    delay(5);
+    digitalWrite(xshut, HIGH);        // solta o reset deste sensor
+    delay(10);                        // t_BOOT e 1,2 ms max (§2.9.1)
+
+    if (!tofResponde(TOF_ADDR_R)) {
+      Serial.printf("[tof] %s NAO respondeu (0xC0 != 0xEE) [tentativa %u]\n", nome, tent);
+      continue;
+    }
+    s.setBus(&Wire);
+    s.setTimeout(150);
+    if (!s.init()) {
+      Serial.printf("[tof] %s respondeu mas o init falhou [tentativa %u]\n", nome, tent);
+      continue;
+    }
+    goto subiu;
   }
-  s.setBus(&Wire);
-  s.setTimeout(150);
-  if (!s.init()) {
-    Serial.printf("[tof] %s respondeu mas o init falhou\n", nome);
-    digitalWrite(xshut, LOW);
-    return false;
-  }
+  Serial.printf("[tof] %s desistiu depois de %u tentativas\n", nome, (unsigned)TOF_TENTATIVAS);
+  digitalWrite(xshut, LOW);           // desliga p/ nao atrapalhar o outro
+  return false;
+
+subiu:;
   if (addr != TOF_ADDR_R) s.setAddress(addr);
   configura(s);
   Serial.printf("[tof] %s ok no endereco 0x%02X\n", nome, addr);
@@ -88,6 +107,16 @@ static bool bringUp(VL53L0X& s, uint8_t xshut, uint8_t addr, const char* nome) {
 }
 
 bool wire1Pronto = false;
+
+// Quantos VL53L0X respondem AGORA, checando identidade e nao so ACK.
+// Serve para perguntar "ha olho acordado?" num barramento onde tambem
+// vivem OLED e o que mais aparecer.
+static uint8_t olhosVivos(bool falar) {
+  uint8_t v = 0;
+  if (tofResponde(TOF_ADDR_R)) { v++; if (falar) Serial.println("[tof] 0x29 responde com os dois XSHUT em reset"); }
+  if (tofResponde(TOF_ADDR_L)) { v++; if (falar) Serial.println("[tof] 0x30 responde com os dois XSHUT em reset"); }
+  return v;
+}
 
 void tofBegin() {
   pinMode(PIN_TOF_L_XSHUT, OUTPUT);
@@ -98,16 +127,17 @@ void tofBegin() {
 
   if (!wire1Pronto) { Wire.begin(PIN_TOF_SDA, PIN_TOF_SCL, 400000); wire1Pronto = true; }
 
-  // Teste de XSHUT: com os dois em reset o barramento tem que estar VAZIO.
-  // Se alguem responder aqui, aquele XSHUT nao esta sendo controlado.
-  uint8_t vivos = 0;
-  for (uint8_t a = 1; a < 127; a++) {
-    Wire.beginTransmission(a);
-    if (Wire.endTransmission() == 0) {
-      Serial.printf("[tof] 0x%02X responde com os dois XSHUT em reset\n", a);
-      vivos++;
-    }
-  }
+  // Teste de XSHUT: com os dois em reset, nenhum OLHO pode responder.
+  //
+  // Isto ja foi escrito como "o barramento tem que estar VAZIO", e essa
+  // formulacao morreu no dia em que os olhos passaram para 21/22: o OLED
+  // mora aqui e responde sempre. O firmware via o 0x3C, concluia "XSHUT
+  // nao esta ligado" e caia em modo caolho com dois olhos bons na mesa.
+  //
+  // A pergunta certa nunca foi "ha alguem no barramento" - e "ha um
+  // VL53L0X". Quem separa os dois casos e o registrador 0xC0, que vale
+  // 0xEE em todo VL53L0X (Tab. 4) e nao existe no SSD1306.
+  uint8_t vivos = olhosVivos(true);
 
   if (vivos) {
     // Sem XSHUT nao da para separar os dois: eles nascem no mesmo 0x29 e
@@ -659,7 +689,9 @@ void exameOlhos() {
   digitalWrite(PIN_TOF_L_XSHUT, LOW);
   digitalWrite(PIN_TOF_R_XSHUT, LOW);
   delay(25);
-  uint8_t nBaixo = scanBus(Wire, "XSHUT em BAIXO (esperado: vazio)", tmp);
+  scanBus(Wire, "XSHUT em BAIXO (esperado: so o OLED)", tmp);
+  // Conta olhos, nao dispositivos: o OLED responde aqui e nao e defeito.
+  uint8_t nBaixo = olhosVivos(false);
 
   digitalWrite(PIN_TOF_L_XSHUT, HIGH);
   digitalWrite(PIN_TOF_R_XSHUT, HIGH);

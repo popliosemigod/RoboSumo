@@ -72,7 +72,11 @@ Params P = {
   /*rangeCm*/80, /*confirmHits*/3, /*loseMisses*/6, /*jumpCm*/35,
   /*edgeBackMs*/260, /*edgeTurnMs*/230, /*sweepMs*/900,
   /*stuckMs*/1400, /*countdownMs*/5000,
-  /*irThreshold*/512, /*irSource*/1, /*irActiveLow*/1,
+  // irSource = 0 (SO o pino digital) porque o modulo em uso tem tres
+  // fios - VCC, GND e OUT - e nao possui saida analogica. Nao ha o que
+  // ler em A0/A1. O limiar deixa de ser deste parametro e passa a ser o
+  // trimpot do proprio modulo; irThreshold fica sem efeito com irSource=0.
+  /*irThreshold*/512, /*irSource*/0, /*irActiveLow*/1,
   /*mode*/MODE_NORMAL, /*soundOn*/1, /*faceOn*/1, /*vbatMin*/660
 };
 
@@ -266,8 +270,15 @@ void tofPoll() {
 }
 
 void irPoll() {
-  uint16_t a = analogRead(PIN_IR_L_A);
-  uint16_t b = analogRead(PIN_IR_R_A);
+  // So le o analogico se alguem pediu por ele. Com modulo de tres fios
+  // (VCC/GND/OUT) A0 e A1 ficam soltos, e ler pino solto a 200 Hz gasta
+  // tempo para produzir numero inventado - que foi exatamente o que
+  // atrapalhou o diagnostico na placa anterior.
+  uint16_t a = 0, b = 0;
+  if (P.irSource != 0) {
+    a = analogRead(PIN_IR_L_A);
+    b = analogRead(PIN_IR_R_A);
+  }
   T.irLraw = a; T.irRraw = b;
 
   bool dl = bordaCrua(digitalRead(PIN_IR_L_D));
@@ -360,9 +371,13 @@ void autoteste() {
   // livre acusar pull-up, a sonda esta mentindo e nada dela vale.
   Serial.print(F("[teste] IR DO esq(D2)=")); Serial.print(digitalRead(PIN_IR_L_D) ? F("ALTO") : F("BAIXO"));
   Serial.print(F(" | IR DO dir(D4)="));      Serial.println(digitalRead(PIN_IR_R_D) ? F("ALTO") : F("BAIXO"));
-  Serial.print(F("[teste] AO esq(A0)="));    Serial.print(analogRead(PIN_IR_L_A));
-  Serial.print(F("  AO dir(A1)="));          Serial.print(analogRead(PIN_IR_R_A));
-  Serial.print(F("  VBAT(A2)="));            Serial.print(analogRead(PIN_VBAT));
+  if (P.irSource != 0) {
+    Serial.print(F("[teste] AO esq(A0)="));  Serial.print(analogRead(PIN_IR_L_A));
+    Serial.print(F("  AO dir(A1)="));        Serial.println(analogRead(PIN_IR_R_A));
+  } else {
+    Serial.println(F("[teste] AO nao usado: modulo de 3 fios, limiar e o trimpot"));
+  }
+  Serial.print(F("[teste] VBAT(A2)="));      Serial.print(analogRead(PIN_VBAT));
   Serial.println(F(" de 1023"));
   Serial.print(F("[teste] nFAULT(D8)="));    Serial.println(digitalRead(PIN_DRV_FAULT) ? F("ok") : F("FALHA ATIVA"));
   Serial.println(F("[teste] --- fim ---"));
@@ -606,7 +621,8 @@ uint32_t monAte = 0;
 
 void ajuda() {
   Serial.println(F("[cmd] a=armar/parar  s=autoteste  e=exame dos olhos"));
-  Serial.println(F("[cmd] b=buzzer  m=monitor 20Hz por 10s  1/2/3=modo  ?=ajuda"));
+  Serial.println(F("[cmd] b=buzzer  m=monitor 20Hz por 10s  p=ajustar trimpot do IR"));
+  Serial.println(F("[cmd] 1/2/3=modo NORMAL/LESMA/CAPIROTO  ?=ajuda"));
 }
 
 void console() {
@@ -617,6 +633,11 @@ void console() {
       case 'e': exameOlhos(); break;
       case 'b': Snd::beep(1500, 150); break;
       case 'm': monAte = millis() + 10000; Serial.println(F("#MONINI")); break;
+      case 'p':                                  // ajuste do trimpot
+        monAte = millis() + 60000;
+        Serial.println(F("[pot] 60 s de leitura. Gire o trimpot ate o OUT virar"));
+        Serial.println(F("[pot] sobre a zona ESCURA, e confira que volta sobre a CLARA"));
+        break;
       case '1': P.mode = MODE_NORMAL;   Brain::applyMode(); Serial.println(F("[modo] NORMAL")); break;
       case '2': P.mode = MODE_LESMA;    Brain::applyMode(); Serial.println(F("[modo] LESMA")); break;
       case '3': P.mode = MODE_CAPIROTO; Brain::applyMode(); Serial.println(F("[modo] CAPIROTO")); break;

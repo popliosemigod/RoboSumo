@@ -15,9 +15,9 @@ ambiente próprio e os dois não se misturam.
 
 | Pino | Função | Ligar em | Por quê aqui |
 |------|--------|----------|--------------|
-| **D2** | IR esquerdo · `DO` | módulo IR esq, saída digital | única interrupção externa livre (INT0) |
+| **D2** | IR esquerdo · `OUT` | módulo IR esq, saída do comparador | única interrupção externa livre (INT0) |
 | **D3** | Buzzer | base do transistor / piezo | `tone()` sequestra o Timer2; fica sozinho nele |
-| **D4** | IR direito · `DO` | módulo IR dir, saída digital | interrupção por mudança de pino (PCINT20) |
+| **D4** | IR direito · `OUT` | módulo IR dir, saída do comparador | interrupção por mudança de pino (PCINT20) |
 | **D5** | **IN1** — lado esquerdo | DRV8833 #1 · AIN1 **e** BIN1 | PWM (Timer0) |
 | **D6** | **IN2** — lado esquerdo | DRV8833 #1 · AIN2 **e** BIN2 | PWM (Timer0) |
 | **D7** | `nSLEEP` das duas pontes | SLP dos dois módulos + pull-down 10 k | |
@@ -32,13 +32,35 @@ ambiente próprio e os dois não se misturam.
 
 | Pino | Função | Ligar em |
 |------|--------|----------|
-| **A0** | IR esquerdo · `AO` | saída analógica do módulo IR esq |
-| **A1** | IR direito · `AO` | saída analógica do módulo IR dir |
+| **A0** | *livre* | só se o módulo IR tiver saída `AO` (ver §2.1) |
+| **A1** | *livre* | idem, lado direito |
 | **A2** | Leitura de bateria | nó do divisor 100 k / 47 k |
 | **A3** | Botão ARMAR | botão para GND (pull-up interno) |
 | **A4** | **SDA** | OLED **e** os dois VL53L0X |
 | **A5** | **SCL** | OLED **e** os dois VL53L0X |
 | A6, A7 | livres | só entrada analógica, sem função digital |
+
+### 2.1 Módulo IR de três fios — o caso deste projeto
+
+Os módulos em uso têm **VCC, GND e `OUT`** — três fios, sem saída analógica.
+`OUT` é a saída do comparador, o equivalente ao `DO` dos módulos de quatro pinos.
+
+- `OUT` esquerdo → **D2**, `OUT` direito → **D4**
+- **A0 e A1 ficam livres.** Não há o que ligar neles.
+- O firmware nasce com `irSource = 0` (só o pino digital). Com módulo de três
+  fios qualquer outro valor faz o robô decidir borda a partir de pino solto.
+
+**O limiar deixa de ser software.** Quem decide claro/escuro é o **trimpot do
+próprio módulo**, não mais um parâmetro no painel. O procedimento:
+
+1. Sensor a 3–5 mm sobre a **zona escura**.
+2. Tecla `p` no serial: 60 s imprimindo o estado dos dois `OUT` a 20 Hz.
+3. Gire o trimpot até o `OUT` **virar de estado** — é o ponto de disparo.
+4. Recue um pouco, para ficar com margem do lado "seguro".
+5. Passe sobre a **faixa clara** e confira que ele vira, e volta ao tirar.
+
+Se o indicador acender invertido (borda onde deveria ser zona segura), o módulo
+indica com nível oposto: mude `irActiveLow` para 0 em `RoboSumoNano.cpp`.
 
 > **Armadilha do shield:** no NANO Pro Shield o conector rotulado `SDA/SCL` **não
 > funciona** — o próprio esquemático dele diz "此版本 SDA SCL 无效" (nesta versão,
@@ -56,7 +78,7 @@ alimentado pelo VCC de 5 V. Isso dá um 3V3 com corrente de verdade, coisa que o
 LiPo 2S 7,4 V ──┬── chave ──┬── VM dos dois DRV8833  (+ 470 µF + 100 nF)
                 │           └── divisor 100k/47k ── A2
                 └── buck 5 V ──┬── VIN do Nano
-                               ├── VCC dos 2 módulos IR
+                               ├── VCC dos 2 módulos IR      (OUT sai em 5 V, ok para o Nano)
                                ├── VCC do OLED
                                ├── VIN dos 2 VL53L0X   ← ver aviso abaixo
                                └── buzzer
@@ -141,6 +163,7 @@ A serial a 115200 é a única interface. Uma tecla dispara cada função:
 | `e` | exame dos olhos: varre com XSHUT em baixo, alto e solto |
 | `b` | buzzer |
 | `m` | monitor a 20 Hz por 10 s — linhas `#M ms dL dR irLa irRa irLdo irRdo` |
+| `p` | 60 s de leitura contínua para **ajustar o trimpot** do IR |
 | `1` `2` `3` | modo NORMAL / LESMA / CAPIROTO |
 | `?` | ajuda |
 

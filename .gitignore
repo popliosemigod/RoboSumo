@@ -40,3 +40,8 @@ desktop.ini
 .DS_Store
 *.swp
 *~
+
+# ---- Diario de bancada -----------------------------------------------
+# Registro corrido dos testes: e anotacao de laboratorio, muda a cada
+# sessao e nao deve poluir o historico nem gerar conflito de merge.
+DIARIO-BANCADA.md

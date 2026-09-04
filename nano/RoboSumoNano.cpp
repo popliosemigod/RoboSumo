@@ -1001,7 +1001,6 @@ void setup() {
   delay(50);
   Serial.println(F("\n===== ROBO SUMO - Arduino Nano (porte bruto) ====="));
 
-  pinMode(PIN_BTN, INPUT_PULLUP);
   pinMode(PIN_LED, OUTPUT);
 
   Mot::begin();
@@ -1058,11 +1057,10 @@ void loop() {
   T.drvFault = (digitalRead(PIN_DRV_FAULT) == LOW);
   if (T.drvFault && T.armed) { Brain::disarm(); Brain::go(ST_FAULT); Serial.println(F("[drv] nFAULT!")); }
 
-  // botao: toque curto arma/desarma
-  static bool btnAnt = HIGH;
-  bool btn = digitalRead(PIN_BTN);
-  if (btnAnt == HIGH && btn == LOW) { if (T.armed) Brain::disarm(); else Brain::arm(); }
-  btnAnt = btn;
+  // Nao ha botao: aqui a serial e a unica forma de armar (tecla 'a').
+  // No porte da ESP32 quem arma e a presenca da bateria no boot; o Nano
+  // nao tem como distinguir USB de pack sem o divisor ligado, entao fica
+  // sempre em IDLE ate alguem mandar.
 
   digitalWrite(PIN_LED, T.armed ? ((millis() / 200) % 2) : LOW);
 

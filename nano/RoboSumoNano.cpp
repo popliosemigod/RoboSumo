@@ -471,6 +471,42 @@ void exameOlhos() {
 }
 
 // ---------------------------------------------------------------------
+//  VOLTIMETRO PARA O MODULO - A6 e A7
+//
+//  A pergunta que sobrou e "chega tensao no pino do modulo?", e ela nao
+//  se responde de dentro do barramento: modulo sem VDD se alimenta pelos
+//  diodos de protecao das linhas de I2C e da ACK assim mesmo.
+//
+//  A6 e A7 do Nano sao entradas SO analogicas - nao servem para nada
+//  digital e estavam sobrando. Um jumper do pino VCC do modulo ate A6
+//  transforma o multimetro em tecla. A referencia do ADC e o AVcc, que
+//  no USB fica perto de 4,7 V e nao de 5,0 - por isso a conta usa
+//  VREF_MV, e o numero sai com o erro sistematico ja tirado.
+// ---------------------------------------------------------------------
+#define VREF_MV 4700UL
+
+void mediaModulo() {
+  Serial.println(F("[volt] --- tensao no modulo (A6=VCC, A7=GND) ---"));
+  uint16_t vcc = 0, gnd = 0;
+  for (uint8_t i = 0; i < 16; i++) { vcc += analogRead(A6); gnd += analogRead(A7); }
+  uint16_t mvV = (uint16_t)(((uint32_t)(vcc / 16) * VREF_MV) / 1023UL);
+  uint16_t mvG = (uint16_t)(((uint32_t)(gnd / 16) * VREF_MV) / 1023UL);
+
+  Serial.print(F("[volt] A6 (VCC do modulo) = ")); Serial.print(mvV); Serial.println(F(" mV"));
+  if (mvV < 300)       Serial.println(F("[volt]   NAO CHEGA TENSAO. O modulo esta pendurado nas"
+                                        " linhas de I2C, se alimentando pelos diodos"));
+  else if (mvV < 2600) Serial.println(F("[volt]   tensao baixa demais: fonte afundando ou fio ruim"));
+  else if (mvV < 3700) Serial.println(F("[volt]   ~3,3 V - correto para este modulo"));
+  else                 Serial.println(F("[volt]   ~5 V no VCC. So e seguro se o modulo tiver LDO"));
+
+  Serial.print(F("[volt] A7 (GND do modulo) = ")); Serial.print(mvG); Serial.println(F(" mV"));
+  if (mvG > 150) Serial.println(F("[volt]   GND do modulo NAO esta no mesmo potencial do Nano:"
+                                  " falta terra comum"));
+  else           Serial.println(F("[volt]   terra comum ok"));
+  Serial.println(F("[volt] --- fim ---"));
+}
+
+// ---------------------------------------------------------------------
 //  DESTRAVAR O BARRAMENTO
 //
 //  Se um escravo for interrompido no meio de um byte - leitura abortada,
@@ -926,6 +962,7 @@ void ajuda() {
   Serial.println(F("[cmd] v=varre o I2C em 5 velocidades (separa artefato de dispositivo)"));
   Serial.println(F("[cmd] w=varre na unha nas duas orientacoes (pega SDA/SCL trocados)"));
   Serial.println(F("[cmd] x=destrava o barramento (escravo segurando SDA) e varre"));
+  Serial.println(F("[cmd] k=mede o VCC do modulo em A6 e o GND dele em A7"));
   Serial.println(F("[cmd] b=buzzer  m=monitor 20Hz por 10s  p=ajustar trimpot do IR"));
   Serial.println(F("[cmd] 1/2/3=modo NORMAL/LESMA/CAPIROTO  ?=ajuda"));
 }
@@ -941,6 +978,7 @@ void console() {
       case 'v': varreVelocidades(); break;
       case 'w': varreNaUnha(); break;
       case 'x': liberaBarramento(); varreI2C(); break;
+      case 'k': mediaModulo(); break;
       case 'b': Snd::beep(1500, 150); break;
       case 'm': monAte = millis() + 10000; Serial.println(F("#MONINI")); break;
       case 'p':                                  // ajuste do trimpot

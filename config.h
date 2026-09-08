@@ -42,8 +42,21 @@
 // ---- Sensores IR de borda (bloco 33-32-35-34 consecutivo) -----------
 #define PIN_IR_R_A      33   // ADC1_CH5 - saida analogica IR direito  (calibracao)
 #define PIN_IR_L_A      32   // ADC1_CH4 - saida analogica IR esquerdo (calibracao)
-#define PIN_IR_R_D      35   // saida digital IR direito  (interrupcao - so entrada)
-#define PIN_IR_L_D      34   // saida digital IR esquerdo (interrupcao - so entrada)
+// O IR ESQUERDO saiu do GPIO 34 e foi para o 23.
+//
+// 34 e 35 sao pinos SO DE ENTRADA e, o que importa aqui, sem pull-up
+// interno. Isso torna impossivel distinguir "sensor disparado" de "fio
+// solto": os dois repousam em BAIXO, e BAIXO e justamente o nivel que o
+// firmware entende como BORDA. Um jumper mal encaixado paralisa o robo e
+// se disfarca de leitura legitima - foi exatamente o que aconteceu na
+// bancada, e custou uma varredura de trimpot e uma troca de modulos ate
+// aparecer.
+//
+// GPIO 23 ficou livre quando o botao de armar saiu do projeto, e tem
+// pull-up interno. Com ele, fio solto repousa em ALTO e a leitura fica
+// honesta: ALTO permanente = ninguem esta falando naquele pino.
+#define PIN_IR_R_D      16   // saida digital IR direito  (com pull-up interno)
+#define PIN_IR_L_D      23   // saida digital IR esquerdo (com pull-up interno)
 
 // ---- Olhos: 2x VL53L0X (Time-of-Flight, I2C) ------------------------
 //  UM SO BARRAMENTO: os olhos foram para 21/22, junto com o OLED.
@@ -73,16 +86,16 @@
 
 // ---- Diversos -------------------------------------------------------
 #define PIN_BUZZER       4   // buzzer passivo via NPN (2N2222) ou direto se piezo
-// Tensao minima de pack para o robo armar sozinho no boot. Uma LiPo 2S
-// descarregada ainda passa de 6 V; alimentado so pelo USB, o divisor le
-// quase zero. E esse degrau que separa "estou na arena" de "estou na
-// bancada" - ver o fim do setup() em RoboSumo.ino.
-#define VBAT_ARMA_V   6.0f
-
 // GPIO 23 ficou LIVRE: o botao de armar saiu do projeto. Quem arma e
 // ligar a placa - ver o fim do setup() em RoboSumo.ino.
-#define PIN_VBAT        39   // ADC1_CH3 - divisor 100k/47k da bateria
-#define PIN_LED          2   // LED da placa
+// ---- Receptor IR do juiz (Artigo 18 do regulamento) -----------------
+//  Obrigatorio: receptor de 950 nm sintonizado em 38 kHz, para receber os
+//  comandos Ready / Start / Stop do controle da RoboCore. Fica na parte
+//  de cima do robo, com vista livre (Artigo 18).
+//
+//  GPIO 32 e entrada com pull-up interno e nao e pino de strapping. O
+//  receptor tem saida em dreno aberto e repousa em ALTO.
+#define PIN_IR_JUIZ     32
 
 // ---- Canais LEDC (usados apenas no core Arduino 2.x) ----------------
 #define CH_IN1     0
@@ -169,7 +182,6 @@ struct Params {
   uint8_t  soundOn;
   uint8_t  faceOn;
   uint8_t  autoRestart;   // volta a buscar sozinho depois da danca
-  uint16_t vbatMin;       // centesimos de volt (ex.: 660 = 6.60 V) -> corta motores
 };
 
 extern Params P;
@@ -203,8 +215,7 @@ static const Params P_DEFAULT = {
   /*mode*/       MODE_NORMAL,
   /*soundOn*/    1,
   /*faceOn*/     1,
-  /*autoRestart*/1,
-  /*vbatMin*/    660
+  /*autoRestart*/1
 };
 
 // ---------------------------------------------------------------------
@@ -232,7 +243,6 @@ struct Telemetry {
   volatile int16_t  pwmL, pwmR;   // -1000..1000 aplicados
   volatile float    pidP, pidI, pidD, pidOut;
 
-  volatile uint16_t vbat;         // centesimos de volt
   volatile bool     drvFault;
   volatile bool     oledOk;       // display respondeu no I2C
   volatile uint8_t  apClients;    // celulares conectados no AP

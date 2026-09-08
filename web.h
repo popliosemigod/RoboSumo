@@ -59,7 +59,7 @@ void sendState() {
     "\"irLd\":%u,\"irRd\":%u,\"tofL\":%d,\"tofR\":%d,\"tofFL\":%u,\"tofFR\":%u,"
     "\"tofOkL\":%u,\"tofOkR\":%u,"
     "\"pl\":%d,\"pr\":%d,\"pp\":%.1f,\"pi\":%.1f,\"pd\":%.1f,\"po\":%.1f,"
-    "\"vbat\":%u,\"flt\":%u,\"up\":%lu,\"cd\":%lu,"
+    "\"juiz\":%u,\"flt\":%u,\"up\":%lu,\"cd\":%lu,"
     "\"na\":%u,\"ne\":%u,\"nl\":%u,\"ta\":%lu,\"hz\":%u,"
     "\"cEsc\":%u,\"cEscL\":%u,\"cEscR\":%u,\"cCla\":%u,\"cClaL\":%u,\"cClaR\":%u,\"cMar\":%d,"
     "\"fw\":\"%s\"}",
@@ -69,7 +69,7 @@ void sendState() {
     T.irLdo ? 1 : 0, T.irRdo ? 1 : 0, T.tofRawL, T.tofRawR, T.tofFailL, T.tofFailR,
     T.tofOkL ? 1 : 0, T.tofOkR ? 1 : 0,
     T.pwmL, T.pwmR, T.pidP, T.pidI, T.pidD, T.pidOut,
-    T.vbat, T.drvFault ? 1 : 0, (unsigned long)T.uptimeMs, (unsigned long)T.countdownLeft,
+    (unsigned)Juiz::estado, T.drvFault ? 1 : 0, (unsigned long)T.uptimeMs, (unsigned long)T.countdownLeft,
     T.nAttacks, T.nEdgeSaves, T.nLost, (unsigned long)T.timeAttackingMs, T.loopHz,
     Sens::CAL.temEsc ? 1 : 0, Sens::CAL.escL, Sens::CAL.escR,
     Sens::CAL.temCla ? 1 : 0, Sens::CAL.claL, Sens::CAL.claR, Sens::CAL.margem,
@@ -84,12 +84,12 @@ void sendParams() {
     "\"rangeCm\":%u,\"confirmHits\":%u,\"loseMisses\":%u,\"jumpCm\":%u,"
     "\"edgeBackMs\":%u,\"edgeTurnMs\":%u,\"irThreshold\":%u,\"irSource\":%u,\"irActiveLow\":%u,"
     "\"sweepMs\":%u,\"rampMs\":%u,\"stuckMs\":%u,\"countdownMs\":%u,"
-    "\"mode\":%u,\"soundOn\":%u,\"faceOn\":%u,\"autoRestart\":%u,\"vbatMin\":%u}",
+    "\"mode\":%u,\"soundOn\":%u,\"faceOn\":%u,\"autoRestart\":%u}",
     P.vSearch, P.vAttack, P.vMax, P.vReverse, P.motInvL, P.motInvR, P.kp, P.ki, P.kd,
     P.rangeCm, P.confirmHits, P.loseMisses, P.jumpCm,
     P.edgeBackMs, P.edgeTurnMs, P.irThreshold, P.irSource, P.irActiveLow,
     P.sweepMs, P.rampMs, P.stuckMs, P.countdownMs,
-    P.mode, P.soundOn, P.faceOn, P.autoRestart, P.vbatMin);
+    P.mode, P.soundOn, P.faceOn, P.autoRestart);
   srv.send(200, "application/json", buf);
 }
 
@@ -136,8 +136,6 @@ void sendSelfTest() {
   s += ",\"irRdo\":";               s += Sens::DG.irRdo ? 1 : 0;
   s += ",\"irLa\":";                s += Sens::DG.irLa;
   s += ",\"irRa\":";                s += Sens::DG.irRa;
-  s += ",\"vbatRaw\":";             s += Sens::DG.vbatRaw;
-  s += ",\"vbat\":";                s += T.vbat;
   s += ",\"flt\":";                 s += T.drvFault ? 1 : 0;
   s += ",\"hz\":";                  s += T.loopHz;
   s += ",\"heap\":";                s += (uint32_t)ESP.getFreeHeap();
@@ -174,7 +172,6 @@ void handleSet() {
   SETU("soundOn",     soundOn,      0,    1)
   SETU("faceOn",      faceOn,       0,    1)
   SETU("autoRestart", autoRestart,  0,    1)
-  SETU("vbatMin",     vbatMin,      0, 1200)
   if (srv.hasArg("kp")) P.kp = constrain(srv.arg("kp").toFloat(), 0.0f, 50.0f);
   if (srv.hasArg("ki")) P.ki = constrain(srv.arg("ki").toFloat(), 0.0f, 10.0f);
   if (srv.hasArg("kd")) P.kd = constrain(srv.arg("kd").toFloat(), 0.0f, 50.0f);
@@ -283,6 +280,21 @@ void begin() {
 }
 
 // Task dedicada no core 0: HTTP nunca atrapalha a malha de controle
+// Tira o ponto de acesso do ar. Durante os rounds o regulamento so
+// admite o sinal do controle do juiz (Artigo 3 §3), e usar o proprio
+// controle da equipe rende Keikoku (Artigo 41). Com o AP desligado a
+// infracao deixa de ser possivel por construcao, e nao por disciplina.
+bool noAr = true;
+void desliga() {
+  if (!noAr) return;
+  noAr = false;
+  dns.stop();
+  srv.stop();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_OFF);
+  Serial.println("[web] ponto de acesso DESLIGADO para a partida (Artigo 3 §3)");
+}
+
 void task(void*) {
   uint32_t dbgT = 0;
   uint8_t  lastN = 255;

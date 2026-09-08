@@ -20,6 +20,7 @@
 #include "config.h"
 #include "motors.h"
 #include "sensors.h"
+#include "juiz.h"
 #include "sound.h"
 #include "face.h"
 #include "brain.h"
@@ -111,26 +112,26 @@ void controlTask(void*) {
       Serial.printf(
         "[OLHO] esq: %4dcm (%s, cru=%dmm, falhas=%u) | dir: %4dcm (%s, cru=%dmm, falhas=%u)\n"
         "[IR  ] esq: pino=%s AO=%4u -> %s | dir: pino=%s AO=%4u -> %s\n"
-        "[SYS ] estado=%-9s vbat=%.2fV loop=%uHz heap=%u\n",
+        "[SYS ] estado=%-9s juiz=%-7s loop=%uHz heap=%u\n",
         T.distL, tofTxt(T.tofOkL, T.tofRawL, T.distL), T.tofRawL, T.tofFailL,
         T.distR, tofTxt(T.tofOkR, T.tofRawR, T.distR), T.tofRawR, T.tofFailR,
         digitalRead(PIN_IR_L_D) ? "ALTO" : "BAIXO", T.irLraw, T.irL ? "BORDA" : "seguro",
         digitalRead(PIN_IR_R_D) ? "ALTO" : "BAIXO", T.irRraw, T.irR ? "BORDA" : "seguro",
-        STATE_NAME[T.state], T.vbat / 100.0f, T.loopHz, ESP.getFreeHeap());
+        STATE_NAME[T.state], Juiz::nome(), T.loopHz, ESP.getFreeHeap());
 
       // Linha legivel por maquina, consumida pelo painel de bancada do PC
       // (docs\painel.ps1). Prefixo "#D" para separar do texto humano.
       Serial.printf(
         "#D st=%u armed=%u mode=%u hz=%u heap=%u oled=%u ap=%u drv=%u bus=%u "
         "tofL=%u tofR=%u dL=%d dR=%d rL=%d rR=%d fL=%u fR=%u "
-        "irLd=%u irRd=%u irLa=%u irRa=%u irL=%u irR=%u vbat=%u pwmL=%d pwmR=%d\n",
+        "irLd=%u irRd=%u irLa=%u irRa=%u irL=%u irR=%u juiz=%u pwmL=%d pwmR=%d\n",
         T.state, T.armed ? 1 : 0, T.mode, T.loopHz, ESP.getFreeHeap(),
         T.oledOk ? 1 : 0, T.apClients, T.drvFault ? 1 : 0, T.tofNoBus ? 1 : 0,
         T.tofOkL ? 1 : 0, T.tofOkR ? 1 : 0, T.distL, T.distR,
         T.tofRawL, T.tofRawR, T.tofFailL, T.tofFailR,
         digitalRead(PIN_IR_L_D) ? 1 : 0, digitalRead(PIN_IR_R_D) ? 1 : 0,
         T.irLraw, T.irRraw, T.irL ? 1 : 0, T.irR ? 1 : 0,
-        T.vbat, T.pwmL, T.pwmR);
+        (unsigned)Juiz::estado, T.pwmL, T.pwmR);
     }
     vTaskDelayUntil(&last, pdMS_TO_TICKS(5));
   }
@@ -212,7 +213,6 @@ void pollSerialCmd() {
       case 'e': Sens::exameOlhos(); break;
       case 'f': rajadaIR(); break;
       case 'i': Sens::i2cNaUnha(); break;
-      case 'k': Sens::sondaModulo(); break;
       case 'u': Sens::destravaBarramentos(); break;
       case 'a':
         if (T.armed) Brain::disarm(); else Brain::arm();
@@ -222,7 +222,6 @@ void pollSerialCmd() {
         Serial.println("[cmd] d=capturar ESCURO  c=capturar CLARO  x=zerar calibracao");
         Serial.println("[cmd] m=monitor de IR a 20 Hz  o=monitor dos OLHOS a 20 Hz");
         Serial.println("[cmd] e=exame dos olhos (XSHUT, velocidade, pinos trocados)");
-        Serial.println("[cmd] k=mede VCC/GND NO PINO do modulo (GPIO 32 e 33)");
         Serial.println("[cmd] u=destrava os dois barramentos I2C e varre");
         break;
       default: break;                     // ignora quebra de linha e digitacao solta
@@ -240,10 +239,31 @@ void pollSerialCmd() {
 // ---------------------------------------------------------------------
 void houseTask(void*) {
   for (;;) {
-    Sens::pollVbat();
     pollSerialCmd();
 
-    digitalWrite(PIN_LED, T.armed ? ((millis() / 200) % 2) : LOW);
+    // Comandos do arbitro. Fica no nucleo 0 junto do resto do
+    // housekeeping: o receptor decodifica por interrupcao propria, e a
+    // decisao de estado nao pode disputar tempo com a guarda de borda.
+    if (Juiz::poll()) {
+      switch (Juiz::estado) {
+        case Juiz::JZ_READY:
+          // "pronto e imovel". Se ja estava lutando, isto e a pausa do juiz.
+          if (T.armed) Brain::disarm();
+          // Artigo 3 §2 e §3: durante a partida o unico sinal externo
+          // permitido e o do controle do juiz. O ponto de acesso sai do ar
+          // aqui e so volta com o robo reiniciado.
+          Web::desliga();
+          break;
+        case Juiz::JZ_START:
+          if (!T.armed) Brain::arm();
+          break;
+        case Juiz::JZ_STOP:
+          Brain::disarm();
+          break;
+        default: break;
+      }
+    }
+
     vTaskDelay(pdMS_TO_TICKS(40));
   }
 }
@@ -255,7 +275,6 @@ void setup() {
   Serial.println("\n================ ROBO SUMO - boot ================");
   Serial.printf("[boot] firmware v%s  (compilado em %s %s)\n", FW_VERSION, __DATE__, __TIME__);
 
-  pinMode(PIN_LED, OUTPUT);
 
   Web::loadParams();               // parametros salvos na NVS (ou padrao)
   Serial.println("[boot] parametros carregados");
@@ -299,31 +318,16 @@ void setup() {
   xTaskCreatePinnedToCore(uiTask,          "ui",      6144, nullptr, 1, nullptr, 0);
   xTaskCreatePinnedToCore(houseTask,       "house",   3072, nullptr, 1, nullptr, 0);
 
-  // ---- armar --------------------------------------------------------
-  //  "Armar" deixou de ser botao: quem arma e ligar a placa.
+  // Quem arma e o juiz, nao a placa e nao um botao.
   //
-  //  O primeiro guarda que tentei aqui foi o esp_reset_reason(), e ele
-  //  NAO serve: puxar o pino EN e indistinguivel de aplicar energia para
-  //  o RTC, entao todo reset do gravador vinha como ESP_RST_POWERON e o
-  //  robo armava sozinho a cada upload. Foi visto na bancada.
+  //  Ja tentei duas coisas aqui e as duas estavam erradas. Primeiro
+  //  esp_reset_reason(): puxar o pino EN e indistinguivel de aplicar
+  //  energia, entao todo upload armava o robo. Depois a presenca da
+  //  bateria - so que este robo nao tem divisor de bateria nenhum.
   //
-  //  O que separa bancada de luta nao e o tipo de reset, e a BATERIA. Na
-  //  bancada a placa vive do USB e o divisor de VBAT le perto de zero; na
-  //  arena a LiPo 2S esta ligada. Entao o criterio e fisico: so arma se o
-  //  pack estiver presente.
-  //
-  //  Mesmo armando, nada gira na hora: entra a contagem de 5 s com bipes,
-  //  e nesses 5 s a tecla 'a' ou o painel cancelam.
-  for (uint8_t i = 0; i < 12; i++) { Sens::pollVbat(); delay(10); }
-  float vbat = T.vbat / 100.0f;
-  if (vbat >= VBAT_ARMA_V) {
-    Serial.printf("[boot] bateria presente (%.2f V) -> ARMANDO."
-                  " 5 s de contagem; 'a' cancela.\n", vbat);
-    Brain::arm();
-  } else {
-    Serial.printf("[boot] sem bateria (VBAT %.2f V, limiar %.1f V) -> fica em IDLE."
-                  " E bancada: arma com 'a' ou pelo painel.\n", vbat, (double)VBAT_ARMA_V);
-  }
+  //  O regulamento resolve a questao: Artigo 33. O robo espera READY,
+  //  fica imovel, e so se move no START. Nasce em ST_IDLE e fica ali.
+  Serial.println("[boot] aguardando o juiz: A=Ready  B=Start  C=Stop");
 }
 
 void loop() {

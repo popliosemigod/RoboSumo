@@ -21,7 +21,6 @@ struct Diag {
   uint8_t  aOled[8], aTof[8];    // enderecos encontrados (ate 8 por barramento)
   bool     irLdo, irRdo;         // pinos DO no momento da varredura
   uint16_t irLa, irRa;           // pinos AO (ADC cru)
-  uint16_t vbatRaw;              // ADC cru do divisor da bateria
   uint32_t at;                   // millis da ultima varredura
 };
 Diag DG = {};
@@ -422,16 +421,6 @@ void calLimpa() {
 // ---------------------------------------------------------------------
 //  BATERIA
 // ---------------------------------------------------------------------
-float vbatFilt = 0;
-void pollVbat() {
-  // divisor 100k / 47k  ->  Vbat = Vadc * (147/47) = Vadc * 3.128
-  uint32_t acc = 0;
-  for (int i = 0; i < 4; i++) acc += analogRead(PIN_VBAT);
-  float v = (acc / 4.0f) * 3.3f / 4095.0f * 3.128f;
-  vbatFilt = vbatFilt ? (vbatFilt * 0.9f + v * 0.1f) : v;
-  T.vbat = (uint16_t)(vbatFilt * 100.0f);
-}
-
 // ---------------------------------------------------------------------
 //  AUTOTESTE (roda uma vez no boot)
 // ---------------------------------------------------------------------
@@ -517,55 +506,6 @@ static uint8_t scanBus(TwoWire& bus, const char* nome, uint8_t* out) {
   if (!n) Serial.print("  NENHUM DISPOSITIVO");
   Serial.println();
   return n;
-}
-
-// ---------------------------------------------------------------------
-//  O QUE O NANO ENSINOU - dois instrumentos que voltam para ca
-//
-//  A regressao para Arduino Nano achou a causa raiz dos olhos mudos, e
-//  ela nao estava em nenhum lugar onde se procurou aqui: o GND do modulo
-//  VL53L0X nao estava no terra comum. Os pinos do modulo flutuavam, o
-//  chip recebia 0,49 V entre eles e se alimentava pelos diodos de
-//  protecao das linhas de I2C. Meio volt da para puxar SDA no instante
-//  do ACK e nao da para mais nada - por isso ele respondia em endereco
-//  errado, nao devolvia registrador e ignorava o XSHUT.
-//
-//  Nenhum teste feito de dentro do barramento separa isso, porque o
-//  modulo parasitado responde. So medindo a alimentacao NO PINO DELE.
-// ---------------------------------------------------------------------
-
-// GPIO 32 e 33 nasceram no projeto como "AO dos modulos IR". Aquela
-// entrada nunca existiu - o modulo e de tres fios - entao os dois pinos
-// estavam sobrando. Sao ADC1, os unicos que funcionam com o Wi-Fi ligado.
-#define PIN_SONDA_VCC  PIN_IR_L_A   // 32 - ligar no VCC do modulo ToF
-#define PIN_SONDA_GND  PIN_IR_R_A   // 33 - ligar no GND do modulo ToF
-
-void sondaModulo() {
-  Serial.println("[volt] --- tensao NO PINO do modulo ToF ---");
-  analogSetPinAttenuation(PIN_SONDA_VCC, ADC_11db);
-  analogSetPinAttenuation(PIN_SONDA_GND, ADC_11db);
-
-  uint32_t sv = 0, sg = 0;
-  for (uint8_t i = 0; i < 16; i++) {
-    sv += analogReadMilliVolts(PIN_SONDA_VCC);
-    sg += analogReadMilliVolts(PIN_SONDA_GND);
-    delay(2);
-  }
-  uint16_t mvV = sv / 16, mvG = sg / 16;
-
-  Serial.printf("[volt] GPIO %d (VCC do modulo) = %u mV\n", PIN_SONDA_VCC, mvV);
-  Serial.printf("[volt] GPIO %d (GND do modulo) = %u mV\n", PIN_SONDA_GND, mvG);
-  Serial.printf("[volt] diferenca real sobre o chip = %d mV\n", (int)mvV - (int)mvG);
-
-  if (mvG > 150)
-    Serial.println("[volt]   GND do modulo FORA do terra comum. E este o defeito:"
-                   " sem terra comum nao existe nivel logico, existe deriva.");
-  else if ((int)mvV - (int)mvG < 2600)
-    Serial.println("[volt]   terra ok, mas a tensao sobre o chip esta baixa demais:"
-                   " fio de VCC partido, ou fonte afundando.");
-  else
-    Serial.println("[volt]   alimentacao correta no pino do modulo.");
-  Serial.println("[volt] --- fim ---");
 }
 
 // Escravo interrompido no meio de um byte fica segurando SDA em baixo, e
@@ -661,7 +601,6 @@ void selfTest() {
   DG.irRdo = digitalRead(PIN_IR_R_D);
   DG.irLa  = 0;      // modulo de 3 fios: nao ha AO
   DG.irRa  = 0;
-  DG.vbatRaw = analogRead(PIN_VBAT);
   DG.at    = millis();
   Serial.printf("[teste] IR DO esq (GPIO34): %s | IR DO dir (GPIO35): %s\n",
                 DG.irLdo ? "ALTO" : "BAIXO", DG.irRdo ? "ALTO" : "BAIXO");
@@ -677,17 +616,18 @@ void selfTest() {
     // DEVOLVER o pino para a funcao digital. analogRead() na ESP32 roteia
     // o pino para o ADC e o digitalRead seguinte passa a mentir - medir
     // uma vez cegava os dois sensores de borda ate o proximo boot.
-    pinMode(PIN_IR_L_D, INPUT);
+    pinMode(PIN_IR_L_D, INPUT_PULLUP);
     pinMode(PIN_IR_R_D, INPUT);
     delayMicroseconds(50);
     bool dL = digitalRead(PIN_IR_L_D), dR = digitalRead(PIN_IR_R_D);
-    Serial.printf("[teste] IR esq GPIO34 = %u mV, digital %s | dir GPIO35 = %u mV, digital %s\n",
-                  mvL, dL ? "ALTO" : "BAIXO", mvR, dR ? "ALTO" : "BAIXO");
-    Serial.println("[teste]   >2500 mV com digital BAIXO = o pino recebe sinal e nao o enxerga;"
-                   " <500 mV = nao chega sinal nenhum");
+    Serial.printf("[teste] IR esq GPIO%u = %u mV, digital %s | dir GPIO%u = %u mV, digital %s\n",
+                  PIN_IR_L_D, mvL, dL ? "ALTO" : "BAIXO",
+                  PIN_IR_R_D, mvR, dR ? "ALTO" : "BAIXO");
+    Serial.println("[teste]   cuidado: com 11 dB o ADC satura perto de 3100 mV; leitura"
+                   " identica nos dois pinos e teto de escala, nao prova de sinal");
   }
-  Serial.printf("[teste] IR sem AO (modulo de 3 fios)  VBAT (GPIO39)=%u de 4095\n",
-                DG.vbatRaw);
+  Serial.printf("[teste] receptor do juiz (GPIO%u) = %s (repouso e ALTO)\n",
+                PIN_IR_JUIZ, digitalRead(PIN_IR_JUIZ) ? "ALTO" : "BAIXO");
   Serial.println("[teste] --- fim ---");
   diagBusy = false;
 }
@@ -887,16 +827,17 @@ void i2cNaUnha() {
 
 // ---------------------------------------------------------------------
 void begin() {
-  pinMode(PIN_IR_L_D, INPUT);
+  // Pull-up onde o pino tem: fio solto passa a repousar em ALTO ("seguro")
+  // em vez de BAIXO ("borda"), e deixa de se disfarcar de leitura boa.
+  // GPIO 34-39 nao tem pull-up interno - por isso o lado direito fica
+  // dependendo do pull-up do proprio modulo.
+  pinMode(PIN_IR_L_D, INPUT_PULLUP);
   pinMode(PIN_IR_R_D, INPUT);
   edgeSem = xSemaphoreCreateBinary();
   attachInterrupt(digitalPinToInterrupt(PIN_IR_L_D), isrIrL, CHANGE);
   attachInterrupt(digitalPinToInterrupt(PIN_IR_R_D), isrIrR, CHANGE);
 
   analogReadResolution(12);
-  analogSetPinAttenuation(PIN_IR_L_A, ADC_11db);
-  analogSetPinAttenuation(PIN_IR_R_A, ADC_11db);
-  analogSetPinAttenuation(PIN_VBAT,   ADC_11db);
 
   tofBegin();
 }

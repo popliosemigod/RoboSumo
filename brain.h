@@ -355,13 +355,6 @@ void tick() {
   // O corte por bateria baixa so passa a valer depois de ver UMA vez uma
   // tensao plausivel de bateria. Sem isso, o divisor desligado (pino
   // flutuando) travaria o robo em FALHA no meio do teste, sem motivo.
-  static bool vbatArmado = false;
-  if (T.vbat >= 700) vbatArmado = true;
-
-  if (vbatArmado && T.vbat < P.vbatMin && st != ST_IDLE && st != ST_FAULT) {
-    Face::say("BATERIA BAIXA"); Face::set(Face::EX_FAULT);
-    go(ST_FAULT); Mot::applyNow(0,0,false); T.armed = false;
-  }
 
   Sight s = look();
   updateConfidence(s);

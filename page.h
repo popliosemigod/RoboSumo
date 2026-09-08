@@ -130,8 +130,6 @@ function diag(){
   h+=dgRow(bt=="vazio"?"bad":"ok","Barramento dos olhos",bt);
   h+=dgRow(irCls(d.irLa),"IR ESQ (AO 32 / DO 34)",irTxt(d.irLa,d.irLdo));
   h+=dgRow(irCls(d.irRa),"IR DIR (AO 33 / DO 35)",irTxt(d.irRa,d.irRdo));
-  h+=dgRow(d.vbatRaw>200?"ok":"bad","Bateria (divisor GPIO39)",
-     d.vbatRaw>200?(d.vbat/100).toFixed(2)+" V (ADC "+d.vbatRaw+")":"ADC "+d.vbatRaw+" &middot; divisor solto?");
   h+=dgRow(d.flt?"bad":"","Pontes DRV8833 (nFAULT 15)",
      d.flt?"nFAULT ACIONADO":"sem falha declarada");
   $("diag").innerHTML=h;
@@ -164,7 +162,7 @@ progress{width:100%;height:8px}
   <div class="row">
     <span class="pill" id="pMode">--</span>
     <span class="pill" id="pState">--</span>
-    <span class="pill" id="pBat">--</span>
+    <span class="pill" id="pJuiz">juiz --</span>
   </div>
 </header>
 
@@ -262,7 +260,7 @@ progress{width:100%;height:8px}
     <div class="kv"><span>Tempo em ataque</span><b id="ta">0 s</b></div>
     <div class="kv"><span>Aproveitamento</span><b id="ef">--</b></div>
     <div class="kv"><span>Falha driver (nFAULT)</span><b id="fl">nao</b></div>
-    <div class="kv"><span>Bateria</span><b id="vb">--</b></div>
+    <div class="kv"><span>Juiz (IR)</span><b id="vb">--</b></div>
   </div>
 
   <!-- ============ AJUSTES ============ -->
@@ -303,8 +301,6 @@ progress{width:100%;height:8px}
     <input type="range" id="stuckMs" min="400" max="4000" step="50">
     <label>CONTAGEM REGRESSIVA (ms) <span id="vcountdownMs"></span></label>
     <input type="range" id="countdownMs" min="0" max="8000" step="250">
-    <label>CORTE POR BATERIA BAIXA (centesimos de V) <span id="vvbatMin"></span></label>
-    <input type="range" id="vbatMin" min="500" max="800" step="5">
     <div class="chk"><input type="checkbox" id="soundOn"><label for="soundOn">Buzzer ligado</label></div>
     <div class="chk"><input type="checkbox" id="faceOn"><label for="faceOn">Carinha no OLED</label></div>
     <div class="chk"><input type="checkbox" id="autoRestart"><label for="autoRestart">Dancar ao vencer e voltar pra luta</label></div>
@@ -397,7 +393,7 @@ addEventListener("blur",()=>{if(drvT)drv(0,0);});
 
 /* ---------- parametros ---------- */
 const INT=["vSearch","vAttack","vMax","vReverse","rangeCm","confirmHits","jumpCm","loseMisses",
-  "edgeBackMs","edgeTurnMs","sweepMs","rampMs","stuckMs","countdownMs","irThreshold","vbatMin"];
+  "edgeBackMs","edgeTurnMs","sweepMs","rampMs","stuckMs","countdownMs","irThreshold"];
 const FLT={kp:10,ki:100,kd:10};            /* slider = valor * fator */
 const BOOL=["soundOn","faceOn","autoRestart","irActiveLow","motInvL","motInvR"];
 const SEL=["irSource"];
@@ -425,12 +421,13 @@ SEL.forEach(k=>{const e=$(k);if(e)e.onchange=()=>push(k,e.value);});
 function poll(){
  fetch("/api/state").then(r=>r.json()).then(s=>{
   failed=0;$("hb").className="hb alive";
+  var JZN=["espera","READY","START","STOP"];
+  $("pJuiz").textContent="juiz "+(JZN[s.juiz]||"--");
+  $("vb").textContent=JZN[s.juiz]||"--";
   $("pMode").textContent=s.modeName;
   $("pState").textContent=s.stateName+(s.state==1?" "+Math.ceil(s.cd/1000):"");
   $("pState").className="pill "+(s.state==5?"hot":s.state==4?"warn":s.armed?"on":"");
   $("pMode").className="pill "+(s.mode==2?"hot":"on");
-  $("pBat").textContent=(s.vbat/100).toFixed(2)+" V";
-  $("pBat").className="pill "+(s.vbat<P.vbatMin+20?"hot":"");
   $("up").textContent="ligado ha "+fmt(s.up);
   if(s.fw)$("fw").textContent="v"+s.fw;
 
@@ -459,7 +456,6 @@ function poll(){
   $("ta").textContent=(s.ta/1000).toFixed(1)+" s";
   $("ef").textContent=s.na?Math.round(100*(s.na-s.nl)/s.na)+"% das investidas mantidas":"--";
   $("fl").textContent=s.flt?"SIM":"nao";
-  $("vb").textContent=(s.vbat/100).toFixed(2)+" V";
 
   hist.push([s.pl,s.pr,s.po]);if(hist.length>180)hist.shift();
   radar(s);chart();

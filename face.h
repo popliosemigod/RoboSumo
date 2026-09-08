@@ -122,10 +122,7 @@ static void statusBar() {
   oled.print(STATE_NAME[T.state]);
   // bateria
   int bx = 112;
-  oled.drawRect(bx, 0, 14, 7, SSD1306_WHITE);
-  oled.fillRect(bx + 14, 2, 2, 3, SSD1306_WHITE);
-  int pct = clampi(((int32_t)T.vbat - 620) * 100 / (840 - 620), 0, 100);
-  oled.fillRect(bx + 2, 2, (pct * 10) / 100, 3, SSD1306_WHITE);
+  // A barra de bateria saiu: nao ha divisor de bateria neste robo.
   oled.drawFastHLine(0, 9, 128, SSD1306_WHITE);
 }
 

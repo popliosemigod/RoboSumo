@@ -194,7 +194,7 @@ static const Params P_DEFAULT = {
   // Padrao no ADC: o AO da um valor que da para conferir e calibrar. O DO
   // depende de o pino estar mesmo ligado, e GPIO34/35 nao tem pull-up
   // interno - solto, ficam em BAIXO e pareceriam borda para sempre.
-  /*irSource*/   1,
+  /*irSource*/   0,   // 3 fios: so o pino digital existe
   /*irActiveLow*/1,
   /*sweepMs*/    900,
   /*rampMs*/     140,

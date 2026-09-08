@@ -279,8 +279,20 @@ void IRAM_ATTR isrIrR() {
 // limiar nao estiver calibrado (irUseAnalog=0), um AO desconectado lendo 0
 // nao consegue travar o robo em manobra de borda eterna.
 void pollIrAnalog() {
-  uint16_t a = analogRead(PIN_IR_L_A);
-  uint16_t b = analogRead(PIN_IR_R_A);
+  // NAO se le mais o ADC aqui, por duas razoes independentes e ambas
+  // definitivas:
+  //
+  //  1. Os modulos IR deste robo sao de TRES fios (VCC/GND/OUT). Nao
+  //     existe saida analogica para ler - o limiar mora no trimpot do
+  //     modulo, nao no software.
+  //  2. GPIO 32 e 33, que eram o "AO esquerdo/direito", viraram as
+  //     sondas de tensao do modulo ToF. Ler o ADC deles agora nao seria
+  //     so inutil: seria decidir borda a partir da alimentacao de outro
+  //     sensor.
+  //
+  // Isso ja custou caro: com irSource=1 (padrao antigo) o robo declarava
+  // BORDA a partir de pino flutuante e ninguem entendia por que.
+  uint16_t a = 0, b = 0;
   T.irLraw = a; T.irRraw = b;
 
   bool dl = rawEdge(digitalRead(PIN_IR_L_D));
@@ -647,14 +659,35 @@ void selfTest() {
   }
   DG.irLdo = digitalRead(PIN_IR_L_D);
   DG.irRdo = digitalRead(PIN_IR_R_D);
-  DG.irLa  = analogRead(PIN_IR_L_A);
-  DG.irRa  = analogRead(PIN_IR_R_A);
+  DG.irLa  = 0;      // modulo de 3 fios: nao ha AO
+  DG.irRa  = 0;
   DG.vbatRaw = analogRead(PIN_VBAT);
   DG.at    = millis();
   Serial.printf("[teste] IR DO esq (GPIO34): %s | IR DO dir (GPIO35): %s\n",
                 DG.irLdo ? "ALTO" : "BAIXO", DG.irRdo ? "ALTO" : "BAIXO");
-  Serial.printf("[teste] AO esq (GPIO32)=%u  AO dir (GPIO33)=%u  VBAT (GPIO39)=%u de 4095\n",
-                DG.irLa, DG.irRa, DG.vbatRaw);
+  // Os pinos de IR sao ADC1 (34 = CH6, 35 = CH7), entao da para medir a
+  // TENSAO que chega neles, e nao so o nivel logico. Isso separa duas
+  // coisas que o digitalRead confunde num pino sem pull-up interno:
+  //   ~0 V   -> nao chega sinal nenhum (fio partido, ou modulo mudo)
+  //   ~3,3 V lido como BAIXO -> o pino recebe o sinal e nao o enxerga:
+  //           a entrada digital daquele GPIO e que esta comprometida.
+  {
+    uint16_t mvL = analogReadMilliVolts(PIN_IR_L_D);
+    uint16_t mvR = analogReadMilliVolts(PIN_IR_R_D);
+    // DEVOLVER o pino para a funcao digital. analogRead() na ESP32 roteia
+    // o pino para o ADC e o digitalRead seguinte passa a mentir - medir
+    // uma vez cegava os dois sensores de borda ate o proximo boot.
+    pinMode(PIN_IR_L_D, INPUT);
+    pinMode(PIN_IR_R_D, INPUT);
+    delayMicroseconds(50);
+    bool dL = digitalRead(PIN_IR_L_D), dR = digitalRead(PIN_IR_R_D);
+    Serial.printf("[teste] IR esq GPIO34 = %u mV, digital %s | dir GPIO35 = %u mV, digital %s\n",
+                  mvL, dL ? "ALTO" : "BAIXO", mvR, dR ? "ALTO" : "BAIXO");
+    Serial.println("[teste]   >2500 mV com digital BAIXO = o pino recebe sinal e nao o enxerga;"
+                   " <500 mV = nao chega sinal nenhum");
+  }
+  Serial.printf("[teste] IR sem AO (modulo de 3 fios)  VBAT (GPIO39)=%u de 4095\n",
+                DG.vbatRaw);
   Serial.println("[teste] --- fim ---");
   diagBusy = false;
 }

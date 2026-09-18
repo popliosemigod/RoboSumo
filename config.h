@@ -1,19 +1,34 @@
 // =====================================================================
-//  ROBO SUMO - config.h
+//  ROBO SUMO v2 - config.h
 //  Pinout, parametros ajustaveis e estruturas globais
-//  Placa alvo: ESP32 DevKit V1 (30 pinos)
+//  Placa alvo: ESP32-C3 Mini / SuperMini (RISC-V, NUCLEO UNICO)
 // =====================================================================
 #pragma once
 #include <Arduino.h>
 
 // ---------------------------------------------------------------------
-//  PINOUT  (agrupado por bloco fisico do header da DevKit V1)
+//  PINOUT
 //
-//  Lateral A (VIN..EN):  13  12  14  27  26  25  33  32  35  34  39  36
-//  Lateral B (D23..3V3): 23  22  TX  RX  21  19  18   5  17  16   4   2  15
+//  O C3 Mini expoe 13 GPIOs no header: 0..10, 20 e 21. Tres deles saem
+//  da conta antes de qualquer coisa:
+//
+//    GPIO 2, 8, 9  -> strapping. O nivel deles no instante do reset
+//                     decide de onde a placa da boot. Carregar um motor
+//                     ou um sensor ali faz a placa nao subir, e o sintoma
+//                     nao parece eletrico - parece firmware quebrado.
+//                     O 8 ainda tem o LED azul da placa; o 9 e o botao
+//                     BOOT.
+//    GPIO 18, 19   -> USB nativo (D- e D+). Nem saem no header.
+//
+//  Sobram exatamente dez: 0, 1, 3, 4, 5, 6, 7, 10, 20, 21 - e este
+//  projeto usa os dez. O Serial vai por USB CDC, que e o que libera o
+//  par 20/21 (seriam a UART0) para o receptor do juiz e o nFAULT.
+//
+//  Nenhum sensor deste robo usa ADC. Isso apaga de vez a armadilha do
+//  ADC2, que nao funciona com o Wi-Fi ligado.
 // ---------------------------------------------------------------------
 
-// ---- Motores / 2x DRV8833 (bloco 14-27-26-25 consecutivo) -----------
+// ---- Motores / 2x DRV8833 -------------------------------------------
 //
 //  Uma ponte H por lado, com os DOIS canais em PARALELO dentro da placa:
 //
@@ -27,82 +42,73 @@
 //        +-- motor frente esq           +-- motor frente dir
 //        +-- motor tras   esq           +-- motor tras   dir
 //
-//  Paralelar entrada COM saida e um modo previsto pelo DRV8833 e dobra a
-//  corrente do canal: 1,5 A RMS por canal viram ~3 A no par. Como os dois
-//  motores de um lado dividem o mesmo par de saidas, essa folga importa -
-//  dois N20 travados juntos passam de 1,5 A e desarmariam a protecao.
+//  E por causa desse paralelo que duas pontes cabem em QUATRO pinos, e
+//  nao em doze. Paralelar entrada com saida e um modo previsto pelo
+//  DRV8833 (datasheet, "Parallel Mode") e dobra a corrente do canal:
+//  1,5 A RMS viram ~3 A no par. Como os dois motores de um lado dividem
+//  o mesmo par de saidas, essa folga importa - dois N20 travados juntos
+//  passam de 1,5 A e desarmariam a protecao de sobrecorrente.
 //
-#define PIN_IN4         14   // Ponte H #2 (DIREITA)  - AIN2 + BIN2
-#define PIN_IN3         27   // Ponte H #2 (DIREITA)  - AIN1 + BIN1
-#define PIN_IN2         26   // Ponte H #1 (ESQUERDA) - AIN2 + BIN2
-#define PIN_IN1         25   // Ponte H #1 (ESQUERDA) - AIN1 + BIN1
-#define PIN_DRV_SLEEP   13   // nSLEEP das DUAS pontes (pull-down 10k = desligado no boot)
-#define PIN_DRV_FAULT   15   // nFAULT das DUAS pontes (dreno aberto + pull-up 10k)
-
-// ---- Sensores IR de borda (bloco 33-32-35-34 consecutivo) -----------
-#define PIN_IR_R_A      33   // ADC1_CH5 - saida analogica IR direito  (calibracao)
-#define PIN_IR_L_A      32   // ADC1_CH4 - saida analogica IR esquerdo (calibracao)
-// O IR ESQUERDO saiu do GPIO 34 e foi para o 23.
+//  Efeito colateral util: as duas rodas de um lado nunca discordam,
+//  porque recebem literalmente a mesma tensao.
 //
-// 34 e 35 sao pinos SO DE ENTRADA e, o que importa aqui, sem pull-up
-// interno. Isso torna impossivel distinguir "sensor disparado" de "fio
-// solto": os dois repousam em BAIXO, e BAIXO e justamente o nivel que o
-// firmware entende como BORDA. Um jumper mal encaixado paralisa o robo e
-// se disfarca de leitura legitima - foi exatamente o que aconteceu na
-// bancada, e custou uma varredura de trimpot e uma troca de modulos ate
-// aparecer.
+#define PIN_IN1          0   // Ponte H #1 (ESQUERDA) - AIN1 + BIN1
+#define PIN_IN2          1   // Ponte H #1 (ESQUERDA) - AIN2 + BIN2
+#define PIN_IN3          3   // Ponte H #2 (DIREITA)  - AIN1 + BIN1
+#define PIN_IN4          4   // Ponte H #2 (DIREITA)  - AIN2 + BIN2
+#define PIN_DRV_SLEEP    5   // nSLEEP das DUAS pontes (pull-down 10k = nasce dormindo)
+#define PIN_DRV_FAULT   21   // nFAULT das DUAS pontes (dreno aberto + pull-up 10k)
+
+// ---- Olho: 1x HC-SR04 (ultrassonico) --------------------------------
 //
-// GPIO 23 ficou livre quando o botao de armar saiu do projeto, e tem
-// pull-up interno. Com ele, fio solto repousa em ALTO e a leitura fica
-// honesta: ALTO permanente = ninguem esta falando naquele pino.
-#define PIN_IR_R_D      16   // saida digital IR direito  (com pull-up interno)
-#define PIN_IR_L_D      23   // saida digital IR esquerdo (com pull-up interno)
-
-// ---- Olhos: 2x VL53L0X (Time-of-Flight, I2C) ------------------------
-//  UM SO BARRAMENTO: os olhos foram para 21/22, junto com o OLED.
+//  TRIG recebe um pulso de 10 us; o modulo dispara oito ciclos a 40 kHz
+//  e levanta ECHO. A largura do pulso de ECHO e o tempo de ida e volta
+//  do som - dividido por 58 da centimetros (datasheet, eq. 3).
 //
-//  O desenho anterior dava barramento dedicado a eles (Wire1 em 16/17)
-//  por um bom motivo: um quadro do OLED ocupa a linha por ~25 ms e isso
-//  atrasaria a leitura de distancia justamente na investida. A separacao
-//  caiu por um motivo de bancada, nao de projeto - o GPIO 17 estava
-//  grampeado em 3,3 V e sem clock nao existe I2C. O preco esta pago em
-//  face.h: o desenho e suspenso enquanto o robo ataca ou salva borda.
+//  ECHO e lido por INTERRUPCAO, nao por pulseIn(). O pulseIn() e espera
+//  ocupada: numa placa de nucleo unico ele seguraria a CPU por ate 38 ms
+//  a cada leitura, e 38 ms e tempo de sobra para o robo passar da borda.
 //
-//  SDA/SCL sao COMPARTILHADOS pelos dois sensores; o que os separa e o
-//  XSHUT, que permite ligar um de cada vez no boot e reendereçar.
-#define PIN_TOF_SDA     21
-#define PIN_TOF_SCL     22
-#define PIN_TOF_L_XSHUT 19   // XSHUT e ativo em nivel BAIXO (datasheet Tab. 2)
-#define PIN_TOF_R_XSHUT 18
-#define TOF_ADDR_L      0x30 // reendereçado no boot
-#define TOF_ADDR_R      0x29 // 0x52 de 8 bits = 0x29 de 7 bits (datasheet §3)
+//  Alimentado em 3,3 V nesta montagem. O modulo e especificado para 5 V
+//  e vai render menos alcance, mas em troca o ECHO sai em 3,3 V e entra
+//  direto no GPIO. Se um dia ele for para 5 V, ECHO passa a precisar de
+//  divisor - e ai o divisor entra nesta tabela, nao antes.
+#define PIN_US_TRIG      6
+#define PIN_US_ECHO      7
 
-// Perfil "high speed" da Tab. 13: 20 ms de orcamento -> ~50 leituras/s
-#define TOF_BUDGET_US   20000
+// Teto de espera do eco, em microssegundos. 25 ms ~ 4,3 m, que e o fim
+// da escala do modulo: alem disso nao ha eco para esperar, so atraso.
+#define US_TIMEOUT_US    25000UL
+#define US_PERIODO_MS    60      // ~16 leituras/s; menos que isso e ouvir o proprio eco
 
-// ---- I2C do OLED (Wire) - o MESMO barramento dos olhos --------------
-#define PIN_SDA         21
-#define PIN_SCL         22
+// ---- Sensor IR de borda ---------------------------------------------
+//
+//  UM modulo so, montado o mais a frente possivel. Na pratica o robo
+//  passa a enxergar a borda apenas quando o nariz ja esta sobre ela,
+//  entao a manobra de fuga e sempre "recua e gira", nunca "gira para o
+//  lado que nao viu" - nao ha lado que nao viu.
+//
+//  GPIO 10 tem pull-up interno. Isso nao e detalhe: fio solto passa a
+//  repousar em ALTO ("seguro") em vez de BAIXO ("borda"). Num pino sem
+//  pull-up, jumper mal encaixado paralisa o robo em manobra de borda
+//  eterna e se disfarca de leitura legitima - ja aconteceu neste projeto
+//  e custou uma troca de modulos ate aparecer.
+#define PIN_IR_BORDA    10
 
-// ---- Diversos -------------------------------------------------------
-#define PIN_BUZZER       4   // buzzer passivo via NPN (2N2222) ou direto se piezo
-// GPIO 23 ficou LIVRE: o botao de armar saiu do projeto. Quem arma e
-// ligar a placa - ver o fim do setup() em RoboSumo.ino.
 // ---- Receptor IR do juiz (Artigo 18 do regulamento) -----------------
-//  Obrigatorio: receptor de 950 nm sintonizado em 38 kHz, para receber os
-//  comandos Ready / Start / Stop do controle da RoboCore. Fica na parte
-//  de cima do robo, com vista livre (Artigo 18).
 //
-//  GPIO 32 e entrada com pull-up interno e nao e pino de strapping. O
-//  receptor tem saida em dreno aberto e repousa em ALTO.
-#define PIN_IR_JUIZ     32
+//  Obrigatorio: receptor de 950 nm sintonizado em 38 kHz, para os
+//  comandos Ready / Start / Stop do controle da RoboCore. Fica na parte
+//  de cima do robo, com vista livre. Saida em dreno aberto, repousa ALTO.
+#define PIN_IR_JUIZ     20
 
-// ---- Canais LEDC (usados apenas no core Arduino 2.x) ----------------
+// ---- PWM ------------------------------------------------------------
+//  O C3 tem 6 canais LEDC; usamos 4. No core 3.x o canal e escolhido
+//  pela propria biblioteca a partir do pino, e CH_* vira so rotulo.
 #define CH_IN1     0
 #define CH_IN2     1
 #define CH_IN3     2
 #define CH_IN4     3
-#define CH_BUZZER  6
 
 #define PWM_FREQ   20000     // 20 kHz: acima do audivel, motor nao "canta"
 #define PWM_BITS   10
@@ -112,16 +118,16 @@
 //  ESTADOS
 // ---------------------------------------------------------------------
 enum RoboState : uint8_t {
-  ST_IDLE = 0,     // parado, aguardando ARM
+  ST_IDLE = 0,     // parado, aguardando o juiz
   ST_COUNTDOWN,    // 5 s regulamentares
   ST_SEARCH,       // varredura procurando o oponente
   ST_LOCK,         // alvo detectado, confirmando (anti-ruido)
-  ST_ATTACK,       // investida com PID
+  ST_ATTACK,       // investida
   ST_EDGE,         // manobra de salvamento na borda
   ST_UNSTUCK,      // destravamento (empurrao sem progresso)
   ST_DANCE,        // dancinha da vitoria
   ST_MANUAL,       // pilotagem pelo painel web
-  ST_FAULT         // falha do driver / bateria critica
+  ST_FAULT         // falha do driver
 };
 
 static const char* const STATE_NAME[] = {
@@ -147,7 +153,11 @@ static const char* const MODE_NAME[] = {
 };
 
 // ---------------------------------------------------------------------
-//  PARAMETROS AJUSTAVEIS (salvos na NVS, editaveis pelo painel web)
+//  PARAMETROS AJUSTAVEIS (salvos na NVS)
+//
+//  Deixaram de ser editaveis pelo painel de proposito. A afinacao agora
+//  se faz no codigo, conversando - o painel virou instrumento de
+//  leitura, nao de ajuste.
 // ---------------------------------------------------------------------
 struct Params {
   uint16_t vSearch;       // 0..1000  velocidade de varredura
@@ -160,8 +170,6 @@ struct Params {
   // corrigir aqui do que trocar quatro fios no borne.
   uint8_t  motInvL, motInvR;
 
-  float    kp, ki, kd;    // PID de direcionamento (erro = distEsq - distDir)
-
   uint16_t rangeCm;       // alcance util de deteccao
   uint8_t  confirmHits;   // leituras coerentes seguidas p/ confirmar alvo real
   uint8_t  loseMisses;    // leituras vazias seguidas p/ considerar alvo perdido
@@ -169,9 +177,7 @@ struct Params {
 
   uint16_t edgeBackMs;    // tempo de recuo ao ver a borda
   uint16_t edgeTurnMs;    // tempo de giro apos o recuo
-  uint16_t irThreshold;   // limiar ADC claro/escuro
-  uint8_t  irSource;      // 0 = so pino DO | 1 = so ADC (AO) | 2 = os dois
-  uint8_t  irActiveLow;   // 1 = sinal indica borda com nivel BAIXO / ADC baixo
+  uint8_t  irActiveLow;   // 1 = borda indicada por nivel BAIXO no pino
 
   uint16_t sweepMs;       // duracao de cada varredura antes de inverter o giro
   uint16_t rampMs;        // tempo de rampa 0 -> vMax (0 = sem rampa)
@@ -179,8 +185,6 @@ struct Params {
   uint16_t countdownMs;   // 5000 no regulamento
 
   uint8_t  mode;
-  uint8_t  soundOn;
-  uint8_t  faceOn;
   uint8_t  autoRestart;   // volta a buscar sozinho depois da danca
 };
 
@@ -193,28 +197,20 @@ static const Params P_DEFAULT = {
   /*vMax*/       820,
   /*vReverse*/   750,
   /*motInvL*/    0, /*motInvR*/ 0,
-  /*kp*/         6.0f,  /*ki*/ 0.05f, /*kd*/ 2.2f,
-  // Tab. 11 da datasheet: alvo cinza 17% da ~80 cm indoor e cai sob luz
-  // forte. Oponente de sumo costuma ser preto, entao 80 cm e o realista.
+  // HC-SR04 alcanca 4 m, mas o dojo tem 77 cm: alvo alem de ~80 cm esta
+  // fora da arena e so pode ser parede, juiz ou perna de mesa.
   /*rangeCm*/    80,
   /*confirmHits*/3,
   /*loseMisses*/ 6,
   /*jumpCm*/     35,
   /*edgeBackMs*/ 260,
   /*edgeTurnMs*/ 230,
-  /*irThreshold*/1800,
-  // Padrao no ADC: o AO da um valor que da para conferir e calibrar. O DO
-  // depende de o pino estar mesmo ligado, e GPIO34/35 nao tem pull-up
-  // interno - solto, ficam em BAIXO e pareceriam borda para sempre.
-  /*irSource*/   0,   // 3 fios: so o pino digital existe
   /*irActiveLow*/1,
   /*sweepMs*/    900,
   /*rampMs*/     140,
   /*stuckMs*/    1400,
   /*countdownMs*/5000,
   /*mode*/       MODE_NORMAL,
-  /*soundOn*/    1,
-  /*faceOn*/     1,
   /*autoRestart*/1
 };
 
@@ -226,25 +222,17 @@ struct Telemetry {
   volatile uint8_t  mode;
   volatile bool     armed;
 
-  volatile int16_t  distL;        // cm, -1 = sem eco
-  volatile int16_t  distR;
-  volatile int16_t  distFused;    // menor distancia valida
-  volatile int8_t   bearing;      // -1 esquerda, 0 centro, +1 direita
+  volatile int16_t  dist;         // cm, -1 = sem eco valido
+  volatile uint16_t echoUs;       // largura crua do ECHO, em us
+  volatile uint16_t usFail;       // leituras invalidas seguidas
   volatile uint8_t  confidence;   // 0..100 - confianca de que o alvo e real
 
-  volatile uint16_t irLraw, irRraw;   // ADC cru dos pinos AO
-  volatile bool     irLdo, irRdo;     // estado cru dos pinos DO
-  volatile bool     irL, irR;         // decisao final: true = vendo a borda clara
-  volatile int16_t  tofRawL, tofRawR;   // ultima leitura crua em mm (-1 = fora de alcance)
-  volatile uint16_t tofFailL, tofFailR; // leituras invalidas seguidas
-  volatile bool     tofOkL, tofOkR;     // sensor inicializado e medindo
-  volatile bool     tofNoBus;           // algo responde no barramento dos olhos
+  volatile bool     irDo;         // nivel cru do pino do IR
+  volatile bool     irBorda;      // decisao final: true = vendo a borda clara
 
   volatile int16_t  pwmL, pwmR;   // -1000..1000 aplicados
-  volatile float    pidP, pidI, pidD, pidOut;
 
   volatile bool     drvFault;
-  volatile bool     oledOk;       // display respondeu no I2C
   volatile uint8_t  apClients;    // celulares conectados no AP
   volatile uint32_t uptimeMs;
   volatile uint32_t countdownLeft;
@@ -259,26 +247,6 @@ struct Telemetry {
 extern Telemetry T;
 
 // ---------------------------------------------------------------------
-//  REGISTRO DE COMBATE (anel de eventos exibido no painel)
-// ---------------------------------------------------------------------
-enum EvtType : uint8_t { EV_ARM=0, EV_LOCK, EV_ATTACK, EV_EDGE, EV_LOST, EV_STUCK, EV_WIN, EV_FAULT };
-static const char* const EVT_NAME[] = { "ARM", "LOCK", "ATAQUE", "BORDA", "PERDEU", "TRAVOU", "VITORIA", "FALHA" };
-
-struct Event {
-  uint32_t t;        // ms desde o ARM
-  uint8_t  type;
-  int16_t  a;        // distancia / lado / etc
-  int16_t  b;        // duracao / pwm / etc
-};
-
-#define EVT_MAX 48
-extern Event  EVLOG[EVT_MAX];
-extern uint8_t EVN;      // quantos validos
-extern uint8_t EVI;      // proximo indice de escrita
-
-void evPush(uint8_t type, int16_t a, int16_t b);
-
-// ---------------------------------------------------------------------
 //  Compatibilidade LEDC entre core Arduino-ESP32 2.x e 3.x
 // ---------------------------------------------------------------------
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -288,22 +256,12 @@ void evPush(uint8_t type, int16_t a, int16_t b);
   static inline void pwmWrite(uint8_t pin, uint8_t ch, uint32_t duty) {
     (void)ch; ledcWrite(pin, duty);
   }
-  static inline void pwmTone(uint8_t pin, uint8_t ch, uint32_t freq) {
-    (void)ch;
-    if (freq) ledcWriteTone(pin, freq);
-    else      ledcWrite(pin, 0);
-  }
 #else
   static inline void pwmSetup(uint8_t pin, uint8_t ch, uint32_t f, uint8_t bits) {
     ledcSetup(ch, f, bits); ledcAttachPin(pin, ch);
   }
   static inline void pwmWrite(uint8_t pin, uint8_t ch, uint32_t duty) {
     (void)pin; ledcWrite(ch, duty);
-  }
-  static inline void pwmTone(uint8_t pin, uint8_t ch, uint32_t freq) {
-    (void)pin;
-    if (freq) ledcWriteTone(ch, freq);
-    else      ledcWrite(ch, 0);
   }
 #endif
 

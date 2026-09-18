@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 900" width="1240" height="900"
+     font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+
+  <style>
+    .bg    { fill:#ffffff }
+    .box   { fill:#fbfbfd; stroke:#1f2430; stroke-width:2 }
+    .chip  { fill:#eef2fb; stroke:#1f2430; stroke-width:2.5 }
+    .mot   { fill:#f3f7ef; stroke:#1f2430; stroke-width:2 }
+    .pnl   { fill:#fcfcfa; stroke:#9aa3b2; stroke-width:1.5; stroke-dasharray:6 4 }
+    .w     { stroke:#1f2430; stroke-width:2; fill:none; stroke-linecap:square }
+    .wpwr  { stroke:#c8102e; stroke-width:2.6; fill:none; stroke-linecap:square }
+    .w33   { stroke:#e08b00; stroke-width:2.4; fill:none; stroke-linecap:square }
+    .wgnd  { stroke:#1f2430; stroke-width:3.2; fill:none; stroke-linecap:square }
+    .t     { font-size:13px; fill:#1f2430 }
+    .tsm   { font-size:11.5px; fill:#4a5263 }
+    .pin   { font-size:12px; fill:#1f2430; font-weight:600 }
+    .net   { font-size:11.5px; fill:#0b5cab; font-weight:700 }
+    .ttl   { font-size:15px; fill:#1f2430; font-weight:700 }
+    .h1    { font-size:24px; fill:#1f2430; font-weight:700 }
+    .h2    { font-size:13px; fill:#6b7280 }
+    .note  { font-size:12px; fill:#4a5263 }
+    .dot   { fill:#1f2430 }
+  </style>
+
+  <rect class="bg" x="0" y="0" width="1240" height="900"/>
+
+  <!-- ================= CABECALHO ================= -->
+  <text class="h1" x="60" y="48">Robô Sumô v2 — esquemático de ligações</text>
+  <text class="h2" x="60" y="70">ESP32-C3 Mini · 1× HC-SR04 · 1× IR de borda · 1× receptor IR do juiz · 2× DRV8833 · 4× motor DC · bateria 7,4 V</text>
+  <line x1="60" y1="84" x2="1180" y2="84" stroke="#d6dae2" stroke-width="1.5"/>
+
+  <!-- ================= ESP32-C3 ================= -->
+  <rect class="chip" x="440" y="160" width="210" height="380" rx="6"/>
+  <text class="ttl" x="545" y="186" text-anchor="middle">ESP32-C3 Mini</text>
+  <text class="tsm" x="545" y="203" text-anchor="middle">RISC-V · núcleo único</text>
+
+  <!-- pinos esquerda (sensores) -->
+  <text class="pin" x="452" y="215">GPIO 6</text>
+  <text class="pin" x="452" y="255">GPIO 7</text>
+  <text class="pin" x="452" y="325">GPIO 10</text>
+  <text class="pin" x="452" y="395">GPIO 20</text>
+  <!-- pinos direita (motores) -->
+  <text class="pin" x="638" y="205" text-anchor="end">GPIO 0</text>
+  <text class="pin" x="638" y="235" text-anchor="end">GPIO 1</text>
+  <text class="pin" x="638" y="305" text-anchor="end">GPIO 3</text>
+  <text class="pin" x="638" y="335" text-anchor="end">GPIO 4</text>
+  <text class="pin" x="638" y="405" text-anchor="end">GPIO 5</text>
+  <text class="pin" x="638" y="445" text-anchor="end">GPIO 21</text>
+  <!-- pinos de alimentacao -->
+  <text class="pin" x="470" y="525">3V3</text>
+  <text class="pin" x="545" y="525" text-anchor="middle">GND</text>
+  <text class="pin" x="620" y="525" text-anchor="end">5V</text>
+
+  <!-- ================= SENSORES (esquerda) ================= -->
+  <rect class="box" x="110" y="170" width="170" height="110" rx="5"/>
+  <text class="ttl" x="195" y="196" text-anchor="middle">HC-SR04</text>
+  <text class="tsm" x="195" y="212" text-anchor="middle">ultrassônico 40 kHz</text>
+  <text class="pin" x="268" y="215" text-anchor="end">TRIG</text>
+  <text class="pin" x="268" y="255" text-anchor="end">ECHO</text>
+  <text class="tsm" x="120" y="272">VCC → 3V3 · GND</text>
+
+  <rect class="box" x="110" y="300" width="170" height="80" rx="5"/>
+  <text class="ttl" x="195" y="325" text-anchor="middle">IR de borda</text>
+  <text class="pin" x="268" y="345" text-anchor="end">OUT</text>
+  <text class="tsm" x="120" y="372">VCC → 3V3 · GND</text>
+
+  <rect class="box" x="110" y="400" width="170" height="80" rx="5"/>
+  <text class="ttl" x="195" y="425" text-anchor="middle">Receptor IR juiz</text>
+  <text class="tsm" x="195" y="440" text-anchor="middle">950 nm / 38 kHz</text>
+  <text class="pin" x="268" y="458" text-anchor="end">OUT</text>
+  <text class="tsm" x="120" y="474">VCC → 3V3 · GND</text>
+
+  <!-- fios sensores -> ESP32 -->
+  <path class="w" d="M280,210 H440"/>
+  <text class="net" x="300" y="204">TRIG</text>
+  <path class="w" d="M280,250 H440"/>
+  <text class="net" x="300" y="244">ECHO</text>
+  <path class="w" d="M280,340 H360 V320 H440"/>
+  <text class="net" x="300" y="334">BORDA</text>
+  <path class="w" d="M280,453 H345 V390 H440"/>
+  <text class="net" x="300" y="447">JUIZ</text>
+
+  <!-- ================= PONTES H (direita) ================= -->
+  <rect class="box" x="790" y="160" width="180" height="190" rx="5"/>
+  <text class="ttl" x="880" y="186" text-anchor="middle">DRV8833 #1</text>
+  <text class="tsm" x="880" y="202" text-anchor="middle">lado ESQUERDO</text>
+  <text class="pin" x="800" y="205">IN1</text>
+  <text class="pin" x="800" y="235">IN2</text>
+  <text class="net" x="800" y="270">nSLEEP</text>
+  <text class="net" x="800" y="300">nFAULT</text>
+  <text class="pin" x="960" y="205" text-anchor="end">OUT1/2</text>
+  <text class="pin" x="960" y="295" text-anchor="end">OUT3/4</text>
+  <text class="tsm" x="880" y="336" text-anchor="middle">AIN1∥BIN1 · AIN2∥BIN2</text>
+
+  <rect class="box" x="790" y="380" width="180" height="190" rx="5"/>
+  <text class="ttl" x="880" y="406" text-anchor="middle">DRV8833 #2</text>
+  <text class="tsm" x="880" y="422" text-anchor="middle">lado DIREITO</text>
+  <text class="pin" x="800" y="420">IN1</text>
+  <text class="pin" x="800" y="450">IN2</text>
+  <text class="net" x="800" y="495">nSLEEP</text>
+  <text class="net" x="800" y="525">nFAULT</text>
+  <text class="pin" x="960" y="420" text-anchor="end">OUT1/2</text>
+  <text class="pin" x="960" y="510" text-anchor="end">OUT3/4</text>
+  <text class="tsm" x="880" y="556" text-anchor="middle">AIN1∥BIN1 · AIN2∥BIN2</text>
+
+  <!-- fios ESP32 -> pontes: PWM ponto a ponto, sem cruzamento -->
+  <path class="w" d="M650,200 H790"/>
+  <text class="net" x="700" y="194">IN1</text>
+  <path class="w" d="M650,230 H790"/>
+  <text class="net" x="700" y="224">IN2</text>
+  <path class="w" d="M650,300 H705 V415 H790"/>
+  <text class="net" x="712" y="410">IN3</text>
+  <path class="w" d="M650,330 H680 V445 H790"/>
+  <text class="net" x="712" y="440">IN4</text>
+
+  <!-- nSLEEP / nFAULT: rótulo de rede, como no KiCad.
+       Vão para as DUAS pontes; desenhar o fio cruzaria os PWM. -->
+  <path class="w" d="M650,400 H745"/>
+  <path class="w" d="M650,440 H745"/>
+  <rect x="745" y="390" width="40" height="20" fill="#e8f0fb" stroke="#0b5cab" stroke-width="1.2" rx="3"/>
+  <text class="net" x="765" y="404" text-anchor="middle">nSLP</text>
+  <rect x="745" y="430" width="40" height="20" fill="#e8f0fb" stroke="#0b5cab" stroke-width="1.2" rx="3"/>
+  <text class="net" x="765" y="444" text-anchor="middle">nFLT</text>
+  <text class="tsm" x="655" y="472">rótulo de rede: liga às</text>
+  <text class="tsm" x="655" y="487">duas pontes (SLP e FLT)</text>
+
+  <!-- ================= MOTORES ================= -->
+  <rect class="mot" x="1030" y="175" width="130" height="50" rx="25"/>
+  <text class="t" x="1095" y="199" text-anchor="middle">M1 frente esq</text>
+  <rect class="mot" x="1030" y="265" width="130" height="50" rx="25"/>
+  <text class="t" x="1095" y="289" text-anchor="middle">M2 trás esq</text>
+  <rect class="mot" x="1030" y="390" width="130" height="50" rx="25"/>
+  <text class="t" x="1095" y="414" text-anchor="middle">M3 frente dir</text>
+  <rect class="mot" x="1030" y="480" width="130" height="50" rx="25"/>
+  <text class="t" x="1095" y="504" text-anchor="middle">M4 trás dir</text>
+
+  <path class="w" d="M970,200 H1030"/>
+  <path class="w" d="M970,290 H1030"/>
+  <path class="w" d="M970,415 H1030"/>
+  <path class="w" d="M970,505 H1030"/>
+
+  <!-- ================= PAINEL DE ALIMENTACAO ================= -->
+  <rect class="pnl" x="60" y="610" width="1120" height="255" rx="8"/>
+  <text class="ttl" x="80" y="636">Alimentação</text>
+  <text class="tsm" x="180" y="636">— três trilhos e um único terra</text>
+
+  <!-- bateria -->
+  <rect class="box" x="90" y="672" width="150" height="66" rx="5"/>
+  <text class="ttl" x="165" y="698" text-anchor="middle">Bateria</text>
+  <text class="t"   x="165" y="718" text-anchor="middle">7,4 V (2S)</text>
+  <text class="pin" x="248" y="686">+</text>
+  <text class="pin" x="248" y="734">−</text>
+
+  <!-- chave -->
+  <path class="wpwr" d="M240,680 H300"/>
+  <circle class="dot" cx="303" cy="680" r="3.5"/>
+  <path class="wpwr" d="M306,678 L332,668"/>
+  <circle class="dot" cx="335" cy="670" r="3.5"/>
+  <path class="wpwr" d="M335,670 H375"/>
+  <text class="tsm" x="300" y="655">chave geral</text>
+
+  <!-- trilho 7V4 -->
+  <path class="wpwr" d="M375,670 H1080"/>
+  <text class="net" x="392" y="663" fill="#c8102e">7V4</text>
+  <path class="wpwr" d="M640,670 V700"/>
+  <text class="t" x="648" y="716">ESP32 · pino 5V</text>
+  <path class="wpwr" d="M860,670 V700"/>
+  <text class="t" x="868" y="716">DRV8833 #1 · VM</text>
+  <path class="wpwr" d="M1060,670 V700"/>
+  <text class="t" x="1068" y="716">DRV8833 #2 · VM</text>
+
+  <!-- trilho 3V3 -->
+  <path class="w33" d="M375,762 H1080"/>
+  <text class="net" x="392" y="755" fill="#e08b00">3V3</text>
+  <path class="w33" d="M375,762 V732"/>
+  <text class="t" x="270" y="768" text-anchor="end">regulador da ESP32 →</text>
+  <path class="w33" d="M560,762 V740"/>
+  <text class="t" x="568" y="754">HC-SR04</text>
+  <path class="w33" d="M760,762 V740"/>
+  <text class="t" x="768" y="754">IR de borda</text>
+  <path class="w33" d="M960,762 V740"/>
+  <text class="t" x="968" y="754">receptor do juiz</text>
+
+  <!-- barra de terra -->
+  <path class="wgnd" d="M165,738 V820"/>
+  <path class="wgnd" d="M100,820 H1100"/>
+  <text class="net" x="112" y="812" fill="#1f2430">GND comum</text>
+  <path class="wgnd" d="M400,820 V800"/>
+  <text class="t" x="408" y="795">bateria −</text>
+  <path class="wgnd" d="M600,820 V800"/>
+  <text class="t" x="608" y="795">ESP32</text>
+  <path class="wgnd" d="M780,820 V800"/>
+  <text class="t" x="788" y="795">pontes H</text>
+  <path class="wgnd" d="M980,820 V800"/>
+  <text class="t" x="988" y="795">sensores</text>
+  <!-- simbolo de terra -->
+  <path class="wgnd" d="M1100,820 V836"/>
+  <path class="wgnd" d="M1084,838 H1116"/>
+  <path class="wgnd" d="M1090,845 H1110"/>
+  <path class="wgnd" d="M1096,852 H1104"/>
+
+  <text class="note" x="90" y="852">O GND comum não é detalhe de alimentação: é a referência contra a qual "alto" e "baixo" existem. Um módulo com o terra fora do comum já custou uma sessão inteira de diagnóstico neste projeto.</text>
+
+  <!-- ================= NOTAS ================= -->
+  <text class="note" x="60" y="586">GPIO 2, 8 e 9 são pinos de strapping e ficam livres · GPIO 18/19 são o USB nativo · o Serial vai por USB CDC, o que libera a UART0 (GPIO 20/21)</text>
+
+</svg>

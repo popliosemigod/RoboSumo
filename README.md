@@ -41,9 +41,13 @@ Duas pontes cabem em quatro pinos porque os dois canais de cada placa entram em
 paralelo (`AIN`∥`BIN` e `AOUT`∥`BOUT`): 2 pinos comandam um lado inteiro, e os
 dois motores daquele lado recebem literalmente a mesma tensão.
 
-**Alimentação:** bateria 7,4 V → `VM` das duas pontes e pino `5V` da ESP32;
-`3V3` da ESP32 → HC-SR04, IR de borda e receptor do juiz. **GND comum** entre
-bateria, pontes, ESP32 e sensores.
+**Alimentação:** bateria 7,4 V → `VM` das duas pontes, e só isso. A ESP32 é
+alimentada pelo USB nesta montagem, e o `3V3` dela alimenta HC-SR04, IR de borda
+e receptor do juiz. **GND comum** entre bateria, pontes, ESP32 e sensores.
+
+> **Não ligue a bateria no pino `5V` da ESP32.** O regulador do C3 Mini (ME6211)
+> aceita no máximo ~6,5 V, e uma 2S entrega 8,4 V carregada. Para o robô andar
+> sem cabo USB, use um step-down de 5 V entre a bateria e esse pino.
 
 > O HC-SR04 é especificado para 5 V e em 3,3 V rende menos alcance. Em troca o
 > `ECHO` sai em 3,3 V e entra direto no GPIO. Se ele for para 5 V, o `ECHO` passa

@@ -163,8 +163,8 @@
   <!-- trilho 7V4 -->
   <path class="wpwr" d="M375,670 H1080"/>
   <text class="net" x="392" y="663" fill="#c8102e">7V4</text>
-  <path class="wpwr" d="M640,670 V700"/>
-  <text class="t" x="648" y="716">ESP32 · pino 5V</text>
+  <text class="t" x="470" y="700">ESP32: alimentada pelo USB</text>
+  <text class="tsm" x="470" y="716">NÃO ligar a bateria no pino 5V — ver nota</text>
   <path class="wpwr" d="M860,670 V700"/>
   <text class="t" x="868" y="716">DRV8833 #1 · VM</text>
   <path class="wpwr" d="M1060,670 V700"/>
@@ -200,7 +200,8 @@
   <path class="wgnd" d="M1090,845 H1110"/>
   <path class="wgnd" d="M1096,852 H1104"/>
 
-  <text class="note" x="90" y="852">O GND comum não é detalhe de alimentação: é a referência contra a qual "alto" e "baixo" existem. Um módulo com o terra fora do comum já custou uma sessão inteira de diagnóstico neste projeto.</text>
+  <text class="note" x="90" y="848">O GND comum não é detalhe de alimentação: é a referência contra a qual "alto" e "baixo" existem. Um módulo com o terra fora do comum já custou uma sessão inteira de diagnóstico neste projeto.</text>
+  <text class="note" x="90" y="862" fill="#c8102e">A bateria alimenta SÓ o VM das pontes. O regulador do C3 Mini aceita no máximo ~6,5 V: 7,4 V (8,4 V carregada) no pino 5V queima o regulador. Para o robô rodar sem cabo, usar um step-down de 5 V entre a bateria e esse pino.</text>
 
   <!-- ================= NOTAS ================= -->
   <text class="note" x="60" y="586">GPIO 2, 8 e 9 são pinos de strapping e ficam livres · GPIO 18/19 são o USB nativo · o Serial vai por USB CDC, o que libera a UART0 (GPIO 20/21)</text>

@@ -1,7 +1,7 @@
 // =====================================================================
-//  ROBO SUMO v2 - sensors.h
+//  ROBO SUMO v3 - sensors.h
 //  Olho: 1x HC-SR04 (ultrassonico, 40 kHz), lido por interrupcao.
-//  Borda: 1x modulo IR digital com ISR + ressincronizacao periodica.
+//  Borda: 1x modulo IR pela SAIDA ANALOGICA (AO), lido no ADC1.
 // =====================================================================
 #pragma once
 #include "config.h"
@@ -11,15 +11,13 @@ namespace Sens {
 // ---------------------------------------------------------------------
 //  OLHO - HC-SR04
 //
-//  O modulo responde a um pulso de 10 us no TRIG com oito ciclos a
-//  40 kHz, e mantem ECHO em ALTO pelo tempo de ida e volta do som. A
-//  conta esta na eq. 3 da nota de aplicacao: cm = us / 58.
+//  Pulso de 10 us no TRIG; o modulo responde com oito ciclos a 40 kHz e
+//  mantem ECHO em ALTO pelo tempo de ida e volta do som. cm = us / 58.
 //
 //  A largura do ECHO e medida por INTERRUPCAO nas duas bordas, com
 //  micros(). A alternativa obvia - pulseIn() - foi descartada de
 //  proposito: ela e espera ocupada e segura a CPU por ate 38 ms por
-//  leitura. Numa placa de nucleo unico isso disputaria tempo com a
-//  guarda de borda, que e justamente a rotina que nao pode atrasar.
+//  leitura, numa placa que so tem um nucleo.
 // ---------------------------------------------------------------------
 volatile uint32_t echoIni  = 0;      // micros() da subida do ECHO
 volatile uint32_t echoLarg = 0;      // largura medida, em us
@@ -59,8 +57,6 @@ void usTask(void*) {
       uint32_t us = echoLarg;
       T.echoUs = (uint16_t)(us > 65535UL ? 65535UL : us);
       int16_t c = (int16_t)(us / 58UL);
-      // Fora de alcance util nao e defeito: o dojo tem 77 cm, entao eco
-      // de 3 m e parede, e parede nao se ataca.
       ok = (us > 0 && us < US_TIMEOUT_US && c > 1 && c <= (int16_t)P.rangeCm);
       cm = ok ? c : -1;
     } else {
@@ -77,37 +73,62 @@ void usTask(void*) {
 }
 
 // ---------------------------------------------------------------------
-//  BORDA - modulo IR digital
+//  BORDA - IR pela saida analogica
 //
-//  A interrupcao e o caminho rapido, mas ela so dispara em TRANSICAO: se
-//  o robo for ligado ja em cima da faixa branca, transicao nenhuma
-//  acontece e o pino fica mentindo em silencio. Por isso o pino tambem e
-//  relido a cada ciclo de controle, em pollIr().
+//  Nao existe interrupcao aqui, e isso e consequencia direta de ler o
+//  AO: interrupcao de GPIO dispara em nivel logico, e o que temos e uma
+//  tensao. Quem vigia a borda e uma varredura a 1 kHz na task de
+//  prioridade maxima - 1 ms de latencia no pior caso, que a 1 m/s da
+//  um milimetro de avanco.
+//
+//  Ler o AO em vez do DO e uma escolha, nao uma limitacao: o DO ja vem
+//  comparado contra o trimpot do modulo, e um limiar que mora num
+//  parafuso nao da para versionar, conferir em codigo nem ajustar por
+//  conversa. O AO devolve o numero e o limiar vira IR_LIMIAR_MV.
 // ---------------------------------------------------------------------
-SemaphoreHandle_t edgeSem = nullptr;
-volatile bool     edge = false;
+volatile bool borda = false;
 
-static inline bool ehBorda(bool nivel) {
-  return P.irActiveLow ? (nivel == LOW) : (nivel == HIGH);
-}
-
-void IRAM_ATTR isrIr() {
-  bool v = ehBorda(digitalRead(PIN_IR_BORDA));
-  edge = v;
-  if (v) {
-    BaseType_t hp = pdFALSE;
-    xSemaphoreGiveFromISR(edgeSem, &hp);
-    if (hp) portYIELD_FROM_ISR();
-  }
-}
-
-void pollIr() {
-  bool d = digitalRead(PIN_IR_BORDA);
-  bool v = ehBorda(d);
-  T.irDo = d;
-  if (v && !edge) xSemaphoreGive(edgeSem);
-  edge = v;
+// Le o AO e decide. Devolve true quando esta vendo a faixa clara.
+bool lerBorda() {
+  uint16_t mv = analogReadMilliVolts(PIN_IR_AO);
+  T.irMv = mv;
+#if IR_BORDA_ABAIXO
+  bool v = (mv < IR_LIMIAR_MV);
+#else
+  bool v = (mv > IR_LIMIAR_MV);
+#endif
+  borda = v;
   T.irBorda = v;
+  return v;
+}
+
+// ---------------------------------------------------------------------
+//  CALIBRACAO DO LIMIAR
+//
+//  Mede por ~600 ms e devolve tambem a excursao. A media sozinha nao
+//  basta: ela nao distingue "sensor parado sobre a superficie" de "robo
+//  sendo movido durante a captura", e calibracao feita em movimento e
+//  pior que nenhuma - ela parece boa.
+// ---------------------------------------------------------------------
+void medeSuperficie(const char* qual) {
+  uint32_t acc = 0;
+  uint16_t mn = 4095, mx = 0;
+  const uint8_t N = 60;
+  for (uint8_t i = 0; i < N; i++) {
+    uint16_t v = analogReadMilliVolts(PIN_IR_AO);
+    acc += v;
+    if (v < mn) mn = v;
+    if (v > mx) mx = v;
+    delay(10);
+  }
+  uint16_t media = (uint16_t)(acc / N);
+  Serial.printf("[ircal] %s: media %u mV (min %u, max %u, excursao %u)\n",
+                qual, media, mn, mx, (unsigned)(mx - mn));
+  if (mx - mn > 200)
+    Serial.println("[ircal]   LEITURA INSTAVEL. Segure o robo parado sobre a "
+                   "superficie e meca de novo.");
+  Serial.printf("[ircal]   limiar atual: %u mV. Meca o preto e o branco e "
+                "ponha IR_LIMIAR_MV no meio dos dois.\n", (unsigned)IR_LIMIAR_MV);
 }
 
 // ---------------------------------------------------------------------
@@ -122,13 +143,13 @@ void selfTest() {
                 ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(),
                 (unsigned)(ESP.getFlashChipSize() / (1024 * 1024)));
 
-  bool ir = digitalRead(PIN_IR_BORDA);
-  Serial.printf("[teste] IR de borda (GPIO %u): pino %s -> %s\n",
-                PIN_IR_BORDA, ir ? "ALTO" : "BAIXO",
-                ehBorda(ir) ? "VENDO BORDA" : "superficie segura");
-  if (!ir && P.irActiveLow)
-    Serial.println("[teste]   atencao: BAIXO em repouso tambem e o que um fio solto "
-                   "faria se o pino nao tivesse pull-up. Confira o jumper do OUT.");
+  uint16_t mv = analogReadMilliVolts(PIN_IR_AO);
+  Serial.printf("[teste] IR AO (GPIO %u, ADC1): %u mV | limiar %u mV -> %s\n",
+                PIN_IR_AO, mv, (unsigned)IR_LIMIAR_MV,
+                lerBorda() ? "VENDO BORDA" : "superficie segura");
+  if (mv < 40)
+    Serial.println("[teste]   quase zero: confira o AO, o 3V3 do modulo e o "
+                   "divisor. Fio solto no ADC tambem le perto de zero.");
 
   // O ultrassonico so prova que existe respondendo. Um disparo direto,
   // sem depender da task, separa "modulo mudo" de "nada na frente".
@@ -141,12 +162,12 @@ void selfTest() {
                   (unsigned long)echoLarg, (long)(echoLarg / 58UL));
   else
     Serial.println("[teste] HC-SR04: NENHUM eco. Se nao ha nada a 4 m isso e normal; "
-                   "se ha, confira TRIG(6), ECHO(7), 3V3 e o GND comum.");
+                   "se ha, confira TRIG(10), ECHO(20), o divisor 1k/2k e o GND comum.");
 
-  Serial.printf("[teste] receptor do juiz (GPIO %u) = %s (repouso e ALTO)\n",
-                PIN_IR_JUIZ, digitalRead(PIN_IR_JUIZ) ? "ALTO" : "BAIXO");
-  Serial.printf("[teste] nFAULT das pontes (GPIO %u) = %s\n",
-                PIN_DRV_FAULT, digitalRead(PIN_DRV_FAULT) ? "ok" : "EM FALHA");
+  Serial.printf("[teste] TB6612FNG STBY (GPIO %u) = %s\n",
+                PIN_STBY, digitalRead(PIN_STBY) ? "ativo" : "standby");
+  Serial.printf("[teste] receptor do edital: GPIO %u reservado, ainda sem leitura\n",
+                PIN_RX_EDITAL);
   Serial.println("[teste] --- fim ---");
 }
 
@@ -157,11 +178,14 @@ void begin() {
   pinMode(PIN_US_ECHO, INPUT);
   attachInterrupt(digitalPinToInterrupt(PIN_US_ECHO), isrEcho, CHANGE);
 
-  // Pull-up interno: fio solto repousa em ALTO ("seguro") em vez de
-  // BAIXO ("borda"), e deixa de se disfarcar de leitura boa.
-  pinMode(PIN_IR_BORDA, INPUT_PULLUP);
-  edgeSem = xSemaphoreCreateBinary();
-  attachInterrupt(digitalPinToInterrupt(PIN_IR_BORDA), isrIr, CHANGE);
+  // 12 bits e atenuacao cheia: a faixa util vai a ~3,1 V, e o divisor
+  // 10k/10k mantem o sinal do sensor abaixo disso.
+  analogReadResolution(12);
+  analogSetPinAttenuation(PIN_IR_AO, ADC_11db);
+
+  // O pino do receptor do edital fica reservado e em repouso ALTO, para
+  // nao ficar flutuando enquanto a decodificacao nao existe.
+  pinMode(PIN_RX_EDITAL, INPUT_PULLUP);
 }
 
 } // namespace Sens

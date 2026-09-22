@@ -1,16 +1,23 @@
 // =====================================================================
-//  ROBO SUMO - motors.h
+//  ROBO SUMO v3 - motors.h
 //
-//  Duas DRV8833, uma por lado, em decaimento lento (slow decay).
-//  Cada ponte tem os dois canais em paralelo (AIN||BIN e AOUT||BOUT),
-//  entao 2 GPIOs comandam um par de saidas capaz de ~3 A, e os dois
-//  motores daquele lado penduram nessas mesmas saidas:
+//  UMA TB6612FNG, dois motores: canal A na roda esquerda, canal B na
+//  direita.
 //
-//     IN1/IN2 -> OUT1/OUT2 -> motor frente esq + motor tras esq
-//     IN3/IN4 -> OUT3/OUT4 -> motor frente dir + motor tras dir
+//     AIN1/AIN2 -> AO1/AO2 -> motor esquerdo
+//     BIN1/BIN2 -> BO1/BO2 -> motor direito
 //
-//  Consequencia util: as duas rodas de um lado nunca discordam, porque
-//  recebem literalmente a mesma tensao.
+//  Decaimento LENTO (slow decay), com PWMA/PWMB jumpeados em 3V3 e o
+//  PWM aplicado nos proprios AIN/BIN. Pela tabela-verdade da datasheet
+//  (pg. 4), com PWM em ALTO:
+//
+//     IN1=H  IN2=L  -> CW            IN1=H  IN2=H -> short brake
+//     IN1=L  IN2=H  -> CCW           IN1=L  IN2=L -> stop (alta impedancia)
+//
+//  Entao segurar IN1 em ALTO e chavear IN2 alterna CW <-> short brake,
+//  que e exatamente decaimento lento. Da muito mais torque em baixa
+//  rotacao que o decaimento rapido - e num sumo o que decide a partida
+//  e justamente o empurrao parado, nao a velocidade de ponta.
 // =====================================================================
 #pragma once
 #include "config.h"
@@ -22,32 +29,32 @@ int16_t tgtL = 0, tgtR = 0;      // velocidade desejada
 bool    sleeping = true;
 uint32_t lastRamp = 0;
 
-// ---- escrita crua num par de saidas ---------------------------------
-// speed: -1000..1000 | brake=true trava as rodas (freio eletrico)
+// ---- escrita crua num canal -----------------------------------------
+// speed: -1000..1000 | brake=true trava a roda (freio eletrico)
 static void raw(uint8_t pinA, uint8_t chA, uint8_t pinB, uint8_t chB,
                 int16_t speed, bool brake) {
   if (speed == 0) {
-    if (brake) { pwmWrite(pinA, chA, PWM_MAX); pwmWrite(pinB, chB, PWM_MAX); } // freio
-    else       { pwmWrite(pinA, chA, 0);       pwmWrite(pinB, chB, 0); }       // livre
+    if (brake) { pwmWrite(pinA, chA, PWM_MAX); pwmWrite(pinB, chB, PWM_MAX); } // H,H
+    else       { pwmWrite(pinA, chA, 0);       pwmWrite(pinB, chB, 0); }       // L,L
     return;
   }
   uint32_t duty = (uint32_t)abs(speed) * PWM_MAX / 1000;
   if (duty > PWM_MAX) duty = PWM_MAX;
-  // Slow decay: um pino em 100%, o outro em (100% - duty).
-  // Da muito mais torque em baixa rotacao que o fast decay.
+  // Um pino em 100%, o outro em (100% - duty): alterna entre girar e
+  // frear dentro do proprio ciclo de PWM.
   if (speed > 0) { pwmWrite(pinA, chA, PWM_MAX);        pwmWrite(pinB, chB, PWM_MAX - duty); }
   else           { pwmWrite(pinA, chA, PWM_MAX - duty); pwmWrite(pinB, chB, PWM_MAX); }
 }
 
-// Manda para as pontes ja aplicando a inversao por lado.
+// Manda para a ponte ja aplicando a inversao por lado.
 static inline void driveSides(int16_t l, int16_t r, bool brake) {
-  raw(PIN_IN1, CH_IN1, PIN_IN2, CH_IN2, P.motInvL ? (int16_t)-l : l, brake);
-  raw(PIN_IN3, CH_IN3, PIN_IN4, CH_IN4, P.motInvR ? (int16_t)-r : r, brake);
+  raw(PIN_AIN1, CH_AIN1, PIN_AIN2, CH_AIN2, P.motInvL ? (int16_t)-l : l, brake);
+  raw(PIN_BIN1, CH_BIN1, PIN_BIN2, CH_BIN2, P.motInvR ? (int16_t)-r : r, brake);
 }
 
 inline void wake(bool on) {
   sleeping = !on;
-  digitalWrite(PIN_DRV_SLEEP, on ? HIGH : LOW);
+  digitalWrite(PIN_STBY, on ? HIGH : LOW);
 }
 
 // Aplica imediatamente, sem rampa (usado pelo guarda de borda)
@@ -95,29 +102,27 @@ void update() {
   T.pwmL = l; T.pwmR = r;
 }
 
+// ---- comandos de alto nivel, usados pelo painel web -----------------
 inline void stop(bool brake = true) { applyNow(0, 0, brake); }
-
 inline void coast() { applyNow(0, 0, false); }
 
 // Giro no proprio eixo. v>0 = horario (para a direita)
-inline void spin(int16_t v) { set(v, -v); }
-inline void spinNow(int16_t v) { applyNow(v, -v); }
+inline void spin(int16_t v)     { set(v, -v); }
+inline void spinNow(int16_t v)  { applyNow(v, -v); }
 
-inline void forward(int16_t v) { set(v, v); }
+inline void forward(int16_t v)  { set(v, v); }
+inline void back(int16_t v)     { set(-v, -v); }
 
 void begin() {
-  pinMode(PIN_DRV_SLEEP, OUTPUT);
-  digitalWrite(PIN_DRV_SLEEP, LOW);          // nasce dormindo = seguro
-  pinMode(PIN_DRV_FAULT, INPUT_PULLUP);
+  pinMode(PIN_STBY, OUTPUT);
+  digitalWrite(PIN_STBY, LOW);          // nasce em standby = seguro
 
-  pwmSetup(PIN_IN1, CH_IN1, PWM_FREQ, PWM_BITS);
-  pwmSetup(PIN_IN2, CH_IN2, PWM_FREQ, PWM_BITS);
-  pwmSetup(PIN_IN3, CH_IN3, PWM_FREQ, PWM_BITS);
-  pwmSetup(PIN_IN4, CH_IN4, PWM_FREQ, PWM_BITS);
+  pwmSetup(PIN_AIN1, CH_AIN1, PWM_FREQ, PWM_BITS);
+  pwmSetup(PIN_AIN2, CH_AIN2, PWM_FREQ, PWM_BITS);
+  pwmSetup(PIN_BIN1, CH_BIN1, PWM_FREQ, PWM_BITS);
+  pwmSetup(PIN_BIN2, CH_BIN2, PWM_FREQ, PWM_BITS);
   applyNow(0, 0, false);
   wake(false);
 }
-
-inline bool fault() { return digitalRead(PIN_DRV_FAULT) == LOW; }
 
 } // namespace Mot

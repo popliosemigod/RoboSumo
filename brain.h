@@ -1,12 +1,19 @@
 // =====================================================================
-//  ROBO SUMO v2 - brain.h
+//  ROBO SUMO v3 - brain.h
 //  Maquina de estados, confirmacao anti-ruido, guarda de borda de alta
 //  prioridade e coreografia da dancinha.
 //
-//  O QUE MUDOU NA v2: com UM olho so nao existe diferenca esquerda/direita
-//  para alimentar um PID de direcao - o erro seria sempre zero. O PID saiu
-//  inteiro. Quem encontra o alvo e a varredura; quem o mantem e avancar
-//  reto enquanto o eco continuar chegando.
+//  A ORDEM DE PRIORIDADE DO COMPORTAMENTO, do mais forte para o mais
+//  fraco, e a razao de ser deste arquivo:
+//
+//    1. BORDA. O IR nao pode falhar. Viu a faixa clara, interrompe tudo
+//       e volta para dentro. Nenhuma perseguicao tem precedencia.
+//    2. ALVO. Enquanto o HC-SR04 ve alguem a frente e o IR nao ve borda,
+//       avanca em cima e empurra.
+//    3. BUSCA. Sem alvo e sem borda, gira procurando.
+//
+//  A prioridade 1 nao e uma checagem dentro do laco de controle - e uma
+//  task propria, de prioridade maior, que preempta o laco.
 // =====================================================================
 #pragma once
 #include "config.h"
@@ -138,58 +145,72 @@ void updateConfidence(const Sight& s) {
 }
 
 // ---------------------------------------------------------------------
-//  GUARDA DE BORDA  (task de prioridade maxima, acordada pela ISR do IR)
-//  Essa e a rotina que impede o robo de cair da arena.
+//  GUARDA DE BORDA  -  PRIORIDADE MAXIMA
 //
-//  Com UM sensor, montado na frente, nao ha "lado que nao viu": quando o
-//  IR acusa, a borda esta sob o nariz. A fuga e sempre recuar e girar, e
-//  o sentido do giro alterna a cada salvamento - insistir sempre no mesmo
-//  lado faz o robo colher a mesma borda de novo quando ele esta preso
-//  entre duas.
+//  Esta task varre o AO do IR a 1 kHz e nao faz mais nada. E a trava de
+//  seguranca que impede o robo de sair da arena, e por isso ela roda
+//  acima do laco de controle: quando a borda aparece, ela preempta o
+//  ataque no meio, sem esperar o laco terminar o ciclo.
+//
+//  A varredura substituiu a interrupcao da v2 por um motivo simples:
+//  interrupcao de GPIO dispara em nivel logico, e o que temos agora e
+//  uma tensao no ADC. 1 ms de latencia no pior caso - a 1 m/s, um
+//  milimetro de avanco.
+//
+//  Com UM sensor, montado na frente, nao ha "lado que nao viu": quando
+//  o IR acusa, a borda esta sob o nariz. A fuga e sempre recuar e girar,
+//  e o sentido do giro alterna a cada salvamento - insistir sempre no
+//  mesmo lado faz o robo colher a mesma borda de novo quando ele esta
+//  preso entre duas.
 // ---------------------------------------------------------------------
 int8_t giroFuga = 1;
 
 void edgeTask(void*) {
+  TickType_t last = xTaskGetTickCount();
   for (;;) {
-    if (xSemaphoreTake(Sens::edgeSem, portMAX_DELAY) != pdTRUE) continue;
+    bool viuBorda = Sens::lerBorda();     // atualiza T.irMv sempre, armado ou nao
 
-    if (!T.armed || st == ST_IDLE || st == ST_MANUAL || st == ST_COUNTDOWN) continue;
-    if (st == ST_DANCE) continue;                 // dancinha nao aciona borda
-    if (!Sens::edge) continue;
+    bool podeAgir = T.armed &&
+                    st != ST_IDLE && st != ST_MANUAL &&
+                    st != ST_COUNTDOWN && st != ST_DANCE;
 
-    edgeOverride = true;
-    go(ST_EDGE);
+    if (viuBorda && podeAgir) {
+      edgeOverride = true;
+      go(ST_EDGE);
 
-    // 1) TRAVA IMEDIATA - freio eletrico, mata a inercia
-    Mot::applyNow(0, 0, true);
-    vTaskDelay(pdMS_TO_TICKS(18));
+      // 1) TRAVA IMEDIATA - freio eletrico, mata a inercia
+      Mot::applyNow(0, 0, true);
+      vTaskDelay(pdMS_TO_TICKS(18));
 
-    // 2) RECUO reto, potencia cheia
-    int16_t vr = E.vReverse;
-    Mot::applyNow(-vr, -vr);
-    uint32_t t0 = millis();
-    while (millis() - t0 < (uint32_t)E.edgeBackMs) vTaskDelay(pdMS_TO_TICKS(4));
+      // 2) RECUO reto, potencia cheia
+      int16_t vr = E.vReverse;
+      Mot::applyNow(-vr, -vr);
+      uint32_t t0 = millis();
+      while (millis() - t0 < (uint32_t)E.edgeBackMs) vTaskDelay(pdMS_TO_TICKS(4));
 
-    // 3) GIRO para dentro da arena
-    int16_t turn = E.vReverse;
-    int8_t  dir  = giroFuga;
-    giroFuga = (int8_t)-giroFuga;               // da proxima vez, para o outro lado
+      // 3) GIRO para dentro da arena
+      int16_t turn = E.vReverse;
+      int8_t  dir  = giroFuga;
+      giroFuga = (int8_t)-giroFuga;           // da proxima vez, para o outro lado
 
-    Mot::applyNow(turn * dir, -turn * dir);
-    t0 = millis();
-    while (millis() - t0 < (uint32_t)E.edgeTurnMs) vTaskDelay(pdMS_TO_TICKS(4));
+      Mot::applyNow(turn * dir, -turn * dir);
+      t0 = millis();
+      while (millis() - t0 < (uint32_t)E.edgeTurnMs) vTaskDelay(pdMS_TO_TICKS(4));
 
-    Mot::applyNow(0, 0, true);
-    vTaskDelay(pdMS_TO_TICKS(15));
+      Mot::applyNow(0, 0, true);
+      vTaskDelay(pdMS_TO_TICKS(15));
 
-    T.nEdgeSaves++;
+      T.nEdgeSaves++;
 
-    // volta pro combate girando no mesmo sentido da fuga
-    hits = 0; misses = 0; prevValid = -1;
-    sweepDir = dir;
-    sweepFlip = millis();
-    go(ST_SEARCH);
-    edgeOverride = false;
+      // volta pro combate girando no mesmo sentido da fuga
+      hits = 0; misses = 0; prevValid = -1;
+      sweepDir = dir;
+      sweepFlip = millis();
+      go(ST_SEARCH);
+      edgeOverride = false;
+    }
+
+    vTaskDelayUntil(&last, pdMS_TO_TICKS(1));   // 1 kHz
   }
 }
 
@@ -275,15 +296,6 @@ void tick() {
 
   uint32_t now = millis();
   T.uptimeMs = now;
-
-  // ---- protecoes ----
-  if (Mot::fault()) {
-    T.drvFault = true;
-    if (st != ST_IDLE && st != ST_FAULT) {
-      Serial.println("[falha] DRV8833 acusou nFAULT - parando");
-      go(ST_FAULT); Mot::applyNow(0, 0, false);
-    }
-  } else T.drvFault = false;
 
   Sight s = look();
   updateConfidence(s);
@@ -415,8 +427,9 @@ void tick() {
 
     // -----------------------------------------------------------------
     case ST_MANUAL:
-      // Comandado direto por manual(). Se o painel calar (aba fechada, Wi-Fi
-      // caiu), o robo para sozinho em 700 ms em vez de sair andando.
+      // Comandado direto por manual(). O painel reenvia a direcao a cada
+      // 300 ms enquanto o botao esta ativo; se ele calar (aba fechada,
+      // Wi-Fi caiu), o robo para sozinho em 700 ms em vez de sair andando.
       if (now - lastManualMs > 700 && (T.pwmL || T.pwmR)) Mot::applyNow(0, 0, true);
       break;
 
@@ -427,11 +440,6 @@ void tick() {
       // significa que o estado ficou para tras depois da manobra - deixar
       // parado e mais honesto do que deixar o caso implicito.
       Mot::set(0, 0);
-      break;
-
-    case ST_FAULT:
-      Mot::applyNow(0, 0, false);
-      Mot::wake(false);
       break;
   }
 

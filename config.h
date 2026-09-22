@@ -1,114 +1,151 @@
 // =====================================================================
-//  ROBO SUMO v2 - config.h
+//  ROBO SUMO v3 - config.h
 //  Pinout, parametros ajustaveis e estruturas globais
-//  Placa alvo: ESP32-C3 Mini / SuperMini (RISC-V, NUCLEO UNICO)
+//  Placa alvo: ESP32-C3 SuperMini (RISC-V, NUCLEO UNICO)
 // =====================================================================
 #pragma once
 #include <Arduino.h>
 
+// =====================================================================
+//  AJUSTE RAPIDO
+//
+//  Os tres numeros que mais mudam na bancada. Estao aqui em cima, e nao
+//  no painel web, de proposito: o valor que funcionou fica versionado,
+//  com o comentario dizendo por que e aquele.
+// =====================================================================
+
+// Limiar do IR de borda, em MILIVOLTS lidos no AO.
+//
+//  Piso preto do dojo reflete pouco  -> fototransistor conduz pouco -> AO ALTO
+//  Faixa branca (Tawara) reflete bem -> conduz muito               -> AO BAIXO
+//
+//  Entao "borda" e a leitura BAIXA. Calibrar assim: apertar 'i' no
+//  monitor serial com o robo sobre o preto, depois sobre o branco, e
+//  por este limiar no meio das duas medidas.
+#define IR_LIMIAR_MV      1600
+#define IR_BORDA_ABAIXO      1   // 1 = a faixa branca e a leitura MAIS BAIXA
+
+// Ate onde um eco do HC-SR04 conta como oponente, em cm.
+//  O dojo tem 77 cm de diametro: eco de 2 m e parede, e parede nao se
+//  ataca. Diminuir se o robo estiver investindo contra o juiz.
+#define US_ALCANCE_CM       60
+
 // ---------------------------------------------------------------------
 //  PINOUT
 //
-//  O C3 Mini expoe 13 GPIOs no header: 0..10, 20 e 21. Tres deles saem
-//  da conta antes de qualquer coisa:
+//  O C3 SuperMini expoe 13 GPIOs no header: 0..10, 20 e 21. Tres saem da
+//  conta antes de qualquer coisa:
 //
 //    GPIO 2, 8, 9  -> strapping. O nivel deles no instante do reset
 //                     decide de onde a placa da boot. Carregar um motor
 //                     ou um sensor ali faz a placa nao subir, e o sintoma
 //                     nao parece eletrico - parece firmware quebrado.
-//                     O 8 ainda tem o LED azul da placa; o 9 e o botao
-//                     BOOT.
+//                     O 8 ainda tem o LED azul da placa; o 9 e o BOOT.
 //    GPIO 18, 19   -> USB nativo (D- e D+). Nem saem no header.
 //
-//  Sobram exatamente dez: 0, 1, 3, 4, 5, 6, 7, 10, 20, 21 - e este
-//  projeto usa os dez. O Serial vai por USB CDC, que e o que libera o
-//  par 20/21 (seriam a UART0) para o receptor do juiz e o nFAULT.
+//  Sobram dez, e a conta ingenua pedia onze: os 7 pinos da TB6612FNG
+//  (AIN1 AIN2 PWMA BIN1 BIN2 PWMB STBY) + TRIG + ECHO + IR + receptor.
 //
-//  Nenhum sensor deste robo usa ADC. Isso apaga de vez a armadilha do
-//  ADC2, que nao funciona com o Wi-Fi ligado.
+//  POR ISSO PWMA E PWMB VAO JUMPEADOS EM 3V3, e o PWM e aplicado nos
+//  proprios AIN/BIN. A tabela-verdade da TB6612FNG (datasheet pg. 4)
+//  permite isso: com PWM em ALTO e IN1 em ALTO, chavear IN2 alterna
+//  entre CW e short brake - que e decaimento LENTO, e da mais torque em
+//  baixa rotacao do que o decaimento rapido. Cai para 5 pinos de ponte.
+//
+//  O Serial vai por USB CDC, que e o que libera o par 20/21 (seriam a
+//  UART0) para o ECHO e o receptor do edital.
 // ---------------------------------------------------------------------
 
-// ---- Motores / 2x DRV8833 -------------------------------------------
+// ---- Motores / 1x TB6612FNG -----------------------------------------
 //
-//  Uma ponte H por lado, com os DOIS canais em PARALELO dentro da placa:
+//    CANAL A -> roda ESQUERDA        CANAL B -> roda DIREITA
+//    AIN1 --.                        BIN1 --.
+//    AIN2 --|                        BIN2 --|
+//           v                               v
+//    AO1 / AO2 -> motor esquerdo     BO1 / BO2 -> motor direito
 //
-//    PONTE H #1 (ESQUERDA)          PONTE H #2 (DIREITA)
-//    IN1 = AIN1 + BIN1  --.         IN3 = AIN1 + BIN1  --.
-//    IN2 = AIN2 + BIN2  --|         IN4 = AIN2 + BIN2  --|
-//                         v                              v
-//    OUT1 = AOUT1 + BOUT1           OUT3 = AOUT1 + BOUT1
-//    OUT2 = AOUT2 + BOUT2           OUT4 = AOUT2 + BOUT2
-//        |                              |
-//        +-- motor frente esq           +-- motor frente dir
-//        +-- motor tras   esq           +-- motor tras   dir
-//
-//  E por causa desse paralelo que duas pontes cabem em QUATRO pinos, e
-//  nao em doze. Paralelar entrada com saida e um modo previsto pelo
-//  DRV8833 (datasheet, "Parallel Mode") e dobra a corrente do canal:
-//  1,5 A RMS viram ~3 A no par. Como os dois motores de um lado dividem
-//  o mesmo par de saidas, essa folga importa - dois N20 travados juntos
-//  passam de 1,5 A e desarmariam a protecao de sobrecorrente.
-//
-//  Efeito colateral util: as duas rodas de um lado nunca discordam,
-//  porque recebem literalmente a mesma tensao.
-//
-#define PIN_IN1          0   // Ponte H #1 (ESQUERDA) - AIN1 + BIN1
-#define PIN_IN2          1   // Ponte H #1 (ESQUERDA) - AIN2 + BIN2
-#define PIN_IN3          3   // Ponte H #2 (DIREITA)  - AIN1 + BIN1
-#define PIN_IN4          4   // Ponte H #2 (DIREITA)  - AIN2 + BIN2
-#define PIN_DRV_SLEEP    5   // nSLEEP das DUAS pontes (pull-down 10k = nasce dormindo)
-#define PIN_DRV_FAULT   21   // nFAULT das DUAS pontes (dreno aberto + pull-up 10k)
+#define PIN_AIN1         3   // canal A (esquerda) - recebe PWM
+#define PIN_AIN2         4   // canal A (esquerda) - recebe PWM
+#define PIN_BIN1         5   // canal B (direita)  - recebe PWM
+#define PIN_BIN2         6   // canal B (direita)  - recebe PWM
+#define PIN_STBY         7   // ALTO = ativo, BAIXO = standby (nasce dormindo)
+// PWMA (pino 23 do CI) e PWMB (pino 15) -> jumper para 3V3. Ver acima.
 
 // ---- Olho: 1x HC-SR04 (ultrassonico) --------------------------------
 //
 //  TRIG recebe um pulso de 10 us; o modulo dispara oito ciclos a 40 kHz
-//  e levanta ECHO. A largura do pulso de ECHO e o tempo de ida e volta
-//  do som - dividido por 58 da centimetros (datasheet, eq. 3).
+//  e levanta ECHO. A largura do ECHO e o tempo de ida e volta do som -
+//  dividido por 58 da centimetros (nota de aplicacao, eq. 3).
+//
+//  TRIG aceita os 3,3 V da C3 direto. O ECHO NAO: ele sai em 5 V, e o
+//  GPIO da C3 nao tolera isso. Vai por DIVISOR 1 k / 2 k:
+//
+//      ECHO --[ 1k ]--+--> GPIO 20
+//                     |
+//                   [ 2k ]
+//                     |
+//                    GND
+//
+//      Vout = 5 V x 2k / (1k + 2k) = 3,33 V     (maximo do GPIO: 3,6 V)
 //
 //  ECHO e lido por INTERRUPCAO, nao por pulseIn(). O pulseIn() e espera
-//  ocupada: numa placa de nucleo unico ele seguraria a CPU por ate 38 ms
-//  a cada leitura, e 38 ms e tempo de sobra para o robo passar da borda.
-//
-//  Alimentado em 3,3 V nesta montagem. O modulo e especificado para 5 V
-//  e vai render menos alcance, mas em troca o ECHO sai em 3,3 V e entra
-//  direto no GPIO. Se um dia ele for para 5 V, ECHO passa a precisar de
-//  divisor - e ai o divisor entra nesta tabela, nao antes.
-#define PIN_US_TRIG      6
-#define PIN_US_ECHO      7
+//  ocupada e seguraria a CPU por ate 38 ms por leitura - numa placa de
+//  nucleo unico isso disputaria tempo com a guarda de borda.
+#define PIN_US_TRIG     10
+#define PIN_US_ECHO     20
 
 // Teto de espera do eco, em microssegundos. 25 ms ~ 4,3 m, que e o fim
 // da escala do modulo: alem disso nao ha eco para esperar, so atraso.
 #define US_TIMEOUT_US    25000UL
 #define US_PERIODO_MS    60      // ~16 leituras/s; menos que isso e ouvir o proprio eco
 
-// ---- Sensor IR de borda ---------------------------------------------
+// ---- Sensor IR de borda: SAIDA ANALOGICA (AO) -----------------------
 //
-//  UM modulo so, montado o mais a frente possivel. Na pratica o robo
-//  passa a enxergar a borda apenas quando o nariz ja esta sobre ela,
-//  entao a manobra de fuga e sempre "recua e gira", nunca "gira para o
-//  lado que nao viu" - nao ha lado que nao viu.
+//  Usamos o AO, e nao o DO. O DO ja vem comparado contra o trimpot do
+//  modulo, entao o limiar mora num parafuso que ninguem consegue
+//  versionar nem conferir. Lendo o AO, o limiar vira IR_LIMIAR_MV la em
+//  cima: um numero no codigo, com historico no git.
 //
-//  GPIO 10 tem pull-up interno. Isso nao e detalhe: fio solto passa a
-//  repousar em ALTO ("seguro") em vez de BAIXO ("borda"). Num pino sem
-//  pull-up, jumper mal encaixado paralisa o robo em manobra de borda
-//  eterna e se disfarca de leitura legitima - ja aconteceu neste projeto
-//  e custou uma troca de modulos ate aparecer.
-#define PIN_IR_BORDA    10
+//  GPIO 0 e ADC1_CH0. ADC1 de proposito - o ADC2 nao funciona com o
+//  Wi-Fi ligado, e o ponto de acesso deste robo fica no ar.
+//
+//  Se o modulo for alimentado em 5 V, o AO chega a 5 V e precisa de
+//  DIVISOR 10 k / 10 k:
+//
+//      AO --[ 10k ]--+--> GPIO 0
+//                    |
+//                 [ 10k ]
+//                    |
+//                   GND
+//
+//      Vout = 5 V x 10k / (10k + 10k) = 2,50 V
+//
+//  Por que 10k/10k aqui e 1k/2k no ECHO: o ECHO e digital e so precisa
+//  caber embaixo de 3,6 V. Este e analogico, e o ADC da C3 satura perto
+//  de 3,1 V - parar em 2,5 V mantem a escala inteira dentro da faixa
+//  linear, em vez de achatar o preto contra o teto do conversor.
+//
+//  ATENCAO: o divisor divide TAMBEM o limiar. IR_LIMIAR_MV e o valor
+//  medido NO GPIO, ja dividido - nao a tensao que sai do sensor.
+#define PIN_IR_AO        0   // ADC1_CH0
 
-// ---- Receptor IR do juiz (Artigo 18 do regulamento) -----------------
+// ---- Receptor do controle do edital (reservado) ---------------------
 //
-//  Obrigatorio: receptor de 950 nm sintonizado em 38 kHz, para os
-//  comandos Ready / Start / Stop do controle da RoboCore. Fica na parte
-//  de cima do robo, com vista livre. Saida em dreno aberto, repousa ALTO.
-#define PIN_IR_JUIZ     20
+//  Pino mapeado e reservado. A decodificacao do protocolo entra depois:
+//  por enquanto nada le este GPIO, e nenhuma biblioteca de IR e
+//  compilada. Quem arma o robo hoje e o painel web ou a tecla 'a' da
+//  serial.
+#define PIN_RX_EDITAL   21
+
+// GPIO 1 (ADC1_CH1) fica LIVRE - unica reserva, e ainda e pino de ADC.
 
 // ---- PWM ------------------------------------------------------------
 //  O C3 tem 6 canais LEDC; usamos 4. No core 3.x o canal e escolhido
 //  pela propria biblioteca a partir do pino, e CH_* vira so rotulo.
-#define CH_IN1     0
-#define CH_IN2     1
-#define CH_IN3     2
-#define CH_IN4     3
+#define CH_AIN1    0
+#define CH_AIN2    1
+#define CH_BIN1    2
+#define CH_BIN2    3
 
 #define PWM_FREQ   20000     // 20 kHz: acima do audivel, motor nao "canta"
 #define PWM_BITS   10
@@ -118,7 +155,7 @@
 //  ESTADOS
 // ---------------------------------------------------------------------
 enum RoboState : uint8_t {
-  ST_IDLE = 0,     // parado, aguardando o juiz
+  ST_IDLE = 0,     // parado, aguardando o start
   ST_COUNTDOWN,    // 5 s regulamentares
   ST_SEARCH,       // varredura procurando o oponente
   ST_LOCK,         // alvo detectado, confirmando (anti-ruido)
@@ -126,13 +163,12 @@ enum RoboState : uint8_t {
   ST_EDGE,         // manobra de salvamento na borda
   ST_UNSTUCK,      // destravamento (empurrao sem progresso)
   ST_DANCE,        // dancinha da vitoria
-  ST_MANUAL,       // pilotagem pelo painel web
-  ST_FAULT         // falha do driver
+  ST_MANUAL        // pilotagem pelo painel web
 };
 
 static const char* const STATE_NAME[] = {
   "IDLE", "COUNTDOWN", "BUSCA", "TRAVANDO", "ATAQUE",
-  "BORDA!", "DESTRAVE", "DANCA", "MANUAL", "FALHA"
+  "BORDA!", "DESTRAVE", "DANCA", "MANUAL"
 };
 
 // ---------------------------------------------------------------------
@@ -155,19 +191,17 @@ static const char* const MODE_NAME[] = {
 // ---------------------------------------------------------------------
 //  PARAMETROS AJUSTAVEIS (salvos na NVS)
 //
-//  Deixaram de ser editaveis pelo painel de proposito. A afinacao agora
-//  se faz no codigo, conversando - o painel virou instrumento de
-//  leitura, nao de ajuste.
+//  Nao sao editaveis pelo painel de proposito: a afinacao se faz no
+//  codigo, conversando. O painel e instrumento de leitura.
 // ---------------------------------------------------------------------
 struct Params {
   uint16_t vSearch;       // 0..1000  velocidade de varredura
   uint16_t vAttack;       // 0..1000  velocidade de investida
-  uint16_t vMax;          // 0..1000  teto absoluto (protege motor 6V em bateria 7.4V)
+  uint16_t vMax;          // 0..1000  teto absoluto
   uint16_t vReverse;      // 0..1000  velocidade de recuo na borda
 
-  // Inverte o sentido de um lado por software. Com dois motores no mesmo
-  // par de saidas, se o lado inteiro girar ao contrario e mais rapido
-  // corrigir aqui do que trocar quatro fios no borne.
+  // Inverte o sentido de um lado por software: mais rapido do que trocar
+  // os dois fios do motor no borne.
   uint8_t  motInvL, motInvR;
 
   uint16_t rangeCm;       // alcance util de deteccao
@@ -177,7 +211,6 @@ struct Params {
 
   uint16_t edgeBackMs;    // tempo de recuo ao ver a borda
   uint16_t edgeTurnMs;    // tempo de giro apos o recuo
-  uint8_t  irActiveLow;   // 1 = borda indicada por nivel BAIXO no pino
 
   uint16_t sweepMs;       // duracao de cada varredura antes de inverter o giro
   uint16_t rampMs;        // tempo de rampa 0 -> vMax (0 = sem rampa)
@@ -197,15 +230,12 @@ static const Params P_DEFAULT = {
   /*vMax*/       820,
   /*vReverse*/   750,
   /*motInvL*/    0, /*motInvR*/ 0,
-  // HC-SR04 alcanca 4 m, mas o dojo tem 77 cm: alvo alem de ~80 cm esta
-  // fora da arena e so pode ser parede, juiz ou perna de mesa.
-  /*rangeCm*/    80,
+  /*rangeCm*/    US_ALCANCE_CM,
   /*confirmHits*/3,
   /*loseMisses*/ 6,
   /*jumpCm*/     35,
   /*edgeBackMs*/ 260,
   /*edgeTurnMs*/ 230,
-  /*irActiveLow*/1,
   /*sweepMs*/    900,
   /*rampMs*/     140,
   /*stuckMs*/    1400,
@@ -227,12 +257,11 @@ struct Telemetry {
   volatile uint16_t usFail;       // leituras invalidas seguidas
   volatile uint8_t  confidence;   // 0..100 - confianca de que o alvo e real
 
-  volatile bool     irDo;         // nivel cru do pino do IR
+  volatile uint16_t irMv;         // AO do IR, em mV JA DIVIDIDOS
   volatile bool     irBorda;      // decisao final: true = vendo a borda clara
 
   volatile int16_t  pwmL, pwmR;   // -1000..1000 aplicados
 
-  volatile bool     drvFault;
   volatile uint8_t  apClients;    // celulares conectados no AP
   volatile uint32_t uptimeMs;
   volatile uint32_t countdownLeft;

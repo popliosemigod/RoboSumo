@@ -16,11 +16,10 @@ build/
 *.o
 
 # ---- VSCode ---------------------------------------------------------
-# O .vscode e versionado so no que ajuda o time; o resto e local.
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json
-!.vscode/launch.json
+# Nada daqui e versionado. Os tres arquivos que ficavam de fora desta
+# regra sairam na limpeza do repositorio, e manter as excecoes so fazia
+# o editor recria-los e eles reaparecerem como nao rastreados.
+.vscode/
 
 # ---- Python (pre-commit / commitizen) -------------------------------
 .venv/

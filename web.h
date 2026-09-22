@@ -1,5 +1,5 @@
 // =====================================================================
-//  ROBO SUMO v3 - web.h
+//  ROBO SUMO v4 - web.h
 //  Ponto de acesso proprio (sem senha) + portal cativo + API JSON.
 //
 //  O painel le o robo, aciona os motores e troca de modo. O que ele NAO

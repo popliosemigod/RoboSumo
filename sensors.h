@@ -1,5 +1,5 @@
 // =====================================================================
-//  ROBO SUMO v3 - sensors.h
+//  ROBO SUMO v4 - sensors.h
 //  Olho: 1x HC-SR04 (ultrassonico, 40 kHz), lido por interrupcao.
 //  Borda: 1x modulo IR pela SAIDA ANALOGICA (AO), lido no ADC1.
 // =====================================================================
@@ -164,8 +164,8 @@ void selfTest() {
     Serial.println("[teste] HC-SR04: NENHUM eco. Se nao ha nada a 4 m isso e normal; "
                    "se ha, confira TRIG(10), ECHO(20), o divisor 1k/2k e o GND comum.");
 
-  Serial.printf("[teste] TB6612FNG STBY (GPIO %u) = %s\n",
-                PIN_STBY, digitalRead(PIN_STBY) ? "ativo" : "standby");
+  Serial.printf("[teste] L298N ENA/ENB (GPIO %u) = %s\n",
+                PIN_EN, digitalRead(PIN_EN) ? "habilitado" : "saidas soltas");
   Serial.printf("[teste] receptor do edital: GPIO %u reservado, ainda sem leitura\n",
                 PIN_RX_EDITAL);
   Serial.println("[teste] --- fim ---");

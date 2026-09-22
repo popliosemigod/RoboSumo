@@ -1,5 +1,5 @@
 // =====================================================================
-//  ROBO SUMO v3 - page.h
+//  ROBO SUMO v4 - page.h
 //  Painel minimo: leitura dos sensores, start/stop, modos e pilotagem
 //  manual das duas rodas.
 //

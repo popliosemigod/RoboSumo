@@ -1,5 +1,5 @@
 // =====================================================================
-//  ROBO SUMO v3 - config.h
+//  ROBO SUMO v4 - config.h
 //  Pinout, parametros ajustaveis e estruturas globais
 //  Placa alvo: ESP32-C3 SuperMini (RISC-V, NUCLEO UNICO)
 // =====================================================================
@@ -19,9 +19,9 @@
 //  Piso preto do dojo reflete pouco  -> fototransistor conduz pouco -> AO ALTO
 //  Faixa branca (Tawara) reflete bem -> conduz muito               -> AO BAIXO
 //
-//  Entao "borda" e a leitura BAIXA. Calibrar assim: apertar 'i' no
-//  monitor serial com o robo sobre o preto, depois sobre o branco, e
-//  por este limiar no meio das duas medidas.
+//  Entao "borda" e a leitura BAIXA. Calibrar assim: apertar 'p' no
+//  monitor serial com o robo sobre o preto, 'b' sobre o branco, e por
+//  este limiar no meio das duas medidas.
 #define IR_LIMIAR_MV      1600
 #define IR_BORDA_ABAIXO      1   // 1 = a faixa branca e a leitura MAIS BAIXA
 
@@ -43,33 +43,59 @@
 //                     O 8 ainda tem o LED azul da placa; o 9 e o BOOT.
 //    GPIO 18, 19   -> USB nativo (D- e D+). Nem saem no header.
 //
-//  Sobram dez, e a conta ingenua pedia onze: os 7 pinos da TB6612FNG
-//  (AIN1 AIN2 PWMA BIN1 BIN2 PWMB STBY) + TRIG + ECHO + IR + receptor.
-//
-//  POR ISSO PWMA E PWMB VAO JUMPEADOS EM 3V3, e o PWM e aplicado nos
-//  proprios AIN/BIN. A tabela-verdade da TB6612FNG (datasheet pg. 4)
-//  permite isso: com PWM em ALTO e IN1 em ALTO, chavear IN2 alterna
-//  entre CW e short brake - que e decaimento LENTO, e da mais torque em
-//  baixa rotacao do que o decaimento rapido. Cai para 5 pinos de ponte.
+//  Sobram dez, e e com dez que este projeto fecha - com um de reserva.
 //
 //  O Serial vai por USB CDC, que e o que libera o par 20/21 (seriam a
 //  UART0) para o ECHO e o receptor do edital.
 // ---------------------------------------------------------------------
 
-// ---- Motores / 1x TB6612FNG -----------------------------------------
+// ---- Motores / 1x L298N (modulo micro) ------------------------------
 //
 //    CANAL A -> roda ESQUERDA        CANAL B -> roda DIREITA
-//    AIN1 --.                        BIN1 --.
-//    AIN2 --|                        BIN2 --|
-//           v                               v
-//    AO1 / AO2 -> motor esquerdo     BO1 / BO2 -> motor direito
+//    IN1 --.                         IN3 --.
+//    IN2 --|                         IN4 --|
+//          v                               v
+//    OUT1 / OUT2 -> motor esquerdo   OUT3 / OUT4 -> motor direito
 //
-#define PIN_AIN1         3   // canal A (esquerda) - recebe PWM
-#define PIN_AIN2         4   // canal A (esquerda) - recebe PWM
-#define PIN_BIN1         5   // canal B (direita)  - recebe PWM
-#define PIN_BIN2         6   // canal B (direita)  - recebe PWM
-#define PIN_STBY         7   // ALTO = ativo, BAIXO = standby (nasce dormindo)
-// PWMA (pino 23 do CI) e PWMB (pino 15) -> jumper para 3V3. Ver acima.
+//  TABELA-VERDADE do L298N, por canal (datasheet ST, "Bridge Control"):
+//
+//     EN=L   qualquer IN      -> saidas em ALTA IMPEDANCIA (roda livre)
+//     EN=H   IN1=H  IN2=L     -> gira num sentido
+//     EN=H   IN1=L  IN2=H     -> gira no outro
+//     EN=H   IN1=IN2          -> fast motor stop (FREIO)
+//
+//  DUAS CONSEQUENCIAS QUE MANDAM NO CODIGO:
+//
+//  1. O PWM vai nos pinos IN, nao no EN. Com EN fixo em ALTO e IN2
+//     chaveando enquanto IN1 fica em ALTO, o canal alterna entre girar e
+//     FREAR - que e decaimento lento, e da mais torque em baixa rotacao.
+//     PWM no EN alternaria entre girar e roda livre (decaimento rapido),
+//     que e justamente o que nao interessa num sumo: o que decide a
+//     partida e o empurrao parado.
+//
+//  2. Com EN em ALTO NAO EXISTE roda livre. IN1=IN2 freia, seja em ALTO
+//     ou em BAIXO. A unica forma de soltar o motor e baixar o EN - por
+//     isso Mot::coast() mexe no EN, e nao so nos PWM.
+//
+//  ENA e ENB vao JUNTOS no mesmo GPIO: nunca foi preciso desligar um
+//  lado sozinho, e amarrar os dois economiza um pino e deixa o robo
+//  nascer com as saidas soltas, que e o estado seguro.
+//
+//  NIVEL LOGICO: o L298N pede Vih >= 2,3 V. A C3 entrega 3,3 V, entao os
+//  comandos entram direto, sem level shifter. (A alimentacao logica do
+//  CI e outra coisa: Vss quer 4,5 a 7 V - ver a secao de alimentacao no
+//  README.)
+//
+//  PRECO A PAGAR: o L298N e Darlington bipolar e derruba cerca de 2 V na
+//  propria ponte, mais sob carga. Dos 7,8 V da bateria o motor ve algo
+//  perto de 5,8 V, e a diferenca vira calor no dissipador.
+//
+#define PIN_IN1          3   // canal A (esquerda) - recebe PWM
+#define PIN_IN2          4   // canal A (esquerda) - recebe PWM
+#define PIN_IN3          5   // canal B (direita)  - recebe PWM
+#define PIN_IN4          6   // canal B (direita)  - recebe PWM
+#define PIN_EN           7   // ENA + ENB juntos. ALTO = habilitado
+                             // (nasce em BAIXO: saidas soltas = seguro)
 
 // ---- Olho: 1x HC-SR04 (ultrassonico) --------------------------------
 //
@@ -142,10 +168,10 @@
 // ---- PWM ------------------------------------------------------------
 //  O C3 tem 6 canais LEDC; usamos 4. No core 3.x o canal e escolhido
 //  pela propria biblioteca a partir do pino, e CH_* vira so rotulo.
-#define CH_AIN1    0
-#define CH_AIN2    1
-#define CH_BIN1    2
-#define CH_BIN2    3
+#define CH_IN1     0
+#define CH_IN2     1
+#define CH_IN3     2
+#define CH_IN4     3
 
 #define PWM_FREQ   20000     // 20 kHz: acima do audivel, motor nao "canta"
 #define PWM_BITS   10
@@ -227,8 +253,8 @@ extern Params P;
 static const Params P_DEFAULT = {
   /*vSearch*/    420,
   /*vAttack*/    900,
-  /*vMax*/       820,
-  /*vReverse*/   750,
+  /*vMax*/       900,   // o L298N ja tira ~2 V no caminho: menos teto a cortar
+  /*vReverse*/   800,
   /*motInvL*/    0, /*motInvR*/ 0,
   /*rangeCm*/    US_ALCANCE_CM,
   /*confirmHits*/3,

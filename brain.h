@@ -1,5 +1,5 @@
 // =====================================================================
-//  ROBO SUMO v3 - brain.h
+//  ROBO SUMO v4 - brain.h
 //  Maquina de estados, confirmacao anti-ruido, guarda de borda de alta
 //  prioridade e coreografia da dancinha.
 //

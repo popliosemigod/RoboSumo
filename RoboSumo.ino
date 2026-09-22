@@ -5,8 +5,8 @@
 //  |  _ <| |_| | |_) | |_| |  ___) | |_| | |  | | |_| |
 //  |_| \_\\___/|____/ \___/  |____/ \___/|_|  |_|\___/
 //
-//  v3 - eletronica enxuta
-//  ESP32-C3 SuperMini | 2x motor DC | 1x TB6612FNG | 1x HC-SR04
+//  v4 - eletronica enxuta, ponte L298N
+//  ESP32-C3 SuperMini | 2x motor DC | 1x L298N (micro) | 1x HC-SR04
 //  1x IR de borda (saida analogica) | bateria 7,8 V
 //
 //  UM NUCLEO. O C3 e RISC-V de nucleo unico, entao nao existe "o Wi-Fi
@@ -110,14 +110,14 @@ void houseTask(void*) {
 void setup() {
   Serial.begin(115200);
   delay(400);                      // USB CDC leva um instante para enumerar
-  Serial.println("\n================ ROBO SUMO v3 - boot ================");
+  Serial.println("\n================ ROBO SUMO v4 - boot ================");
   Serial.printf("[boot] firmware v%s  (compilado em %s %s)\n", FW_VERSION, __DATE__, __TIME__);
 
   Web::loadParams();
   Serial.println("[boot] parametros carregados");
 
-  Mot::begin();                    // TB6612FNG nasce em STBY = LOW
-  Serial.println("[boot] motores/TB6612FNG prontos (em standby)");
+  Mot::begin();                    // L298N nasce com ENA/ENB em LOW
+  Serial.println("[boot] motores/L298N prontos (saidas soltas)");
 
   Sens::begin();
   Serial.println("[boot] sensores (HC-SR04 + IR analogico) prontos");

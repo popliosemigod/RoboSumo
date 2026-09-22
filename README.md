@@ -10,83 +10,100 @@ o sensor IR vigia a borda da arena e traz o robô de volta antes que ele saia.
 
 | Qtd | Componente |
 |---|---|
-| 1 | ESP32-C3 SuperMini |
-| 1 | Ponte H TB6612FNG (canal A + canal B) |
+| 1 | ESP32-C3 SuperMini + extension board |
+| 1 | Ponte H **L298N** (módulo micro) |
 | 2 | Motor DC (2 rodas) |
 | 1 | HC-SR04 — ultrassônico, acha o oponente |
 | 1 | Módulo IR — **saída analógica (AO)**, vigia a borda |
 | 1 | Bateria 7,8 V |
 | 1 | Step-down 5 V (ver *Alimentação*) |
-| — | Resistores dos divisores: 1 kΩ, 2 kΩ, 2× 10 kΩ |
+| — | Resistores: 1 kΩ, 2 kΩ, 2× 10 kΩ (divisores) e 10 kΩ (pull-down do EN) |
 | — | Receptor do controle do edital — pino reservado, ainda não montado |
 
 ## Pinagem
 
-### ESP32-C3 → componentes
+A pinagem foi arrumada para a ponte H **encaixar de uma vez**, num conector só.
+
+### Fileira A — `5 · 6 · 7 · 8 · 9 · 10 · 20 · 21`
+
+| GPIO | Sinal | Vai para |
+|---|---|---|
+| **5** | `IN1` | L298N — canal A (roda esquerda) |
+| **6** | `IN2` | L298N — canal A (roda esquerda) |
+| **7** | `IN3` | L298N — canal B (roda direita) |
+| ~~8~~ | — | **strapping — sem contato no conector** |
+| ~~9~~ | — | **strapping (BOOT) — sem contato no conector** |
+| **10** | `IN4` | L298N — canal B (roda direita) |
+| **20** | `ENA` + `ENB` | L298N — ALTO habilita as duas pontes |
+| **21** | reservado | receptor do controle do edital |
+
+`IN1` a `IN4` ocupam uma barra de **6 vias** cobrindo 5 → 10, com as posições do
+8 e do 9 **sem pino no conector**.
+
+Por que essas duas ficam vazias: são pinos de strapping, e o nível deles no
+instante do reset decide de onde a placa dá boot. O 9 é o `BOOT` — se algo o
+puxar para baixo na hora de ligar, a placa entra em modo de gravação e o firmware
+nunca roda. **Não existe corrida de quatro pinos úteis seguidos nesta placa**: o 2
+quebra a fileira B, o 8 e o 9 quebram a A. Três seguidos é o máximo, e é por isso
+que o `IN4` pula para o 10 em vez de continuar a sequência.
+
+### Fileira B — `0 · 1 · 2 · 3 · 4`
 
 | GPIO | ADC | Sinal | Vai para |
 |---|---|---|---|
 | **0** | **ADC1_CH0** | `AO` | IR de borda — **via divisor 10 k / 10 k** |
-| **3** | — | `AIN1` | TB6612FNG pino 21 — canal A (roda esquerda) |
-| **4** | — | `AIN2` | TB6612FNG pino 22 — canal A (roda esquerda) |
-| **5** | — | `BIN1` | TB6612FNG pino 17 — canal B (roda direita) |
-| **6** | — | `BIN2` | TB6612FNG pino 16 — canal B (roda direita) |
-| **7** | — | `STBY` | TB6612FNG pino 19 — ALTO = ativo |
-| **10** | — | `TRIG` | HC-SR04 — 3,3 V direto, sem divisor |
-| **20** | — | `ECHO` | HC-SR04 — **via divisor 1 k / 2 k** |
-| **21** | — | reservado | receptor do controle do edital (sem leitura ainda) |
-| 1 | ADC1_CH1 | — | livre |
+| **1** | ADC1_CH1 | — | livre |
+| ~~2~~ | — | — | strapping |
+| **3** | — | `TRIG` | HC-SR04 — 3,3 V direto, sem divisor |
+| **4** | — | `ECHO` | HC-SR04 — **via divisor 1 k / 2 k** |
 
-**Livres e intocáveis:** 2, 8 e 9 são pinos de strapping — o nível deles no reset
-decide de onde a placa dá boot, e carregar um deles faz a placa não subir com um
-sintoma que não parece elétrico, parece firmware quebrado. 18 e 19 são o USB nativo.
+O HC-SR04 ficou com o par adjacente 3/4, então ele também entra de uma vez, num
+conector de 2 vias.
 
-### TB6612FNG — pinagem completa
+### L298N — pinagem do módulo
 
-| Pino | Nome | Liga em |
-|---|---|---|
-| 24, 13, 14 | `VM1`, `VM2`, `VM3` | **bateria 7,8 V** |
-| 20 | `VCC` | **3,3 V da ESP32** — ver o aviso abaixo |
-| 18 | `GND` | GND comum |
-| 3, 4, 9, 10 | `PGND1`, `PGND2` | GND comum |
-| 21 | `AIN1` | GPIO 3 |
-| 22 | `AIN2` | GPIO 4 |
-| 23 | `PWMA` | **jumper para 3V3** |
-| 17 | `BIN1` | GPIO 5 |
-| 16 | `BIN2` | GPIO 6 |
-| 15 | `PWMB` | **jumper para 3V3** |
-| 19 | `STBY` | GPIO 7 |
-| 1, 2 / 5, 6 | `AO1` / `AO2` | motor esquerdo |
-| 11, 12 / 7, 8 | `BO1` / `BO2` | motor direito |
+| Pino do módulo | Liga em |
+|---|---|
+| `VMS` / `+12V` / `Vs` | **bateria 7,8 V** |
+| `+5V` (`Vss`, lógica) | **trilho de 5 V** — ver o aviso abaixo |
+| `GND` | GND comum |
+| `IN1` | GPIO 5 |
+| `IN2` | GPIO 6 |
+| `IN3` | GPIO 7 |
+| `IN4` | GPIO 10 |
+| `ENA` | GPIO 20 |
+| `ENB` | GPIO 20 — **mesmo fio do ENA** |
+| `OUT1` / `OUT2` | motor esquerdo |
+| `OUT3` / `OUT4` | motor direito |
 
-> **`VCC` da ponte vai em 3,3 V, não em 5 V.** A datasheet dá
-> `VIH = VCC × 0,7` para as entradas lógicas. Com `VCC` em 5 V isso exige
-> **3,5 V** para reconhecer um nível ALTO — e a C3 entrega no máximo 3,3 V, ou
-> seja, nunca chegaria lá com folga. Com `VCC` em 3,3 V o limiar cai para 2,31 V
-> e sobra margem. O `VM` dos motores continua nos 7,8 V da bateria: são
-> alimentações independentes, e é para isso que a ponte tem duas.
+`ENA` e `ENB` vão juntos porque nunca foi preciso desligar um lado sozinho — e
+amarrar os dois economiza um GPIO.
 
-> **`PWMA` e `PWMB` vão jumpeados em 3V3.** Os 7 pinos da ponte não cabem: são
-> 10 GPIOs úteis no C3 e a conta pedia 11 (7 + TRIG + ECHO + IR + receptor). Com
-> os `PWM` fixos em ALTO, o PWM é aplicado nos próprios `AIN`/`BIN` — pela
-> tabela-verdade da datasheet isso alterna entre **CW** e **short brake**, que é
-> decaimento lento e dá mais torque parado do que o decaimento rápido. Num sumô
-> o que decide a partida é o empurrão parado, não a velocidade de ponta.
+> **A lógica do L298N quer 5 V, não 3,3 V.** O `Vss` do CI é especificado para
+> 4,5 a 7 V. Isso é a *alimentação*; as *entradas* são outra coisa, e nelas o
+> L298N pede `Vih ≥ 2,3 V` — os 3,3 V da C3 passam com folga, sem level shifter.
+
+> **Ponha um pull-down de 10 kΩ do `EN` para o GND.** Entre aplicar energia e o
+> `setup()` rodar existe quase um segundo em que o GPIO 20 ainda não é saída: ele
+> flutua, e `EN` flutuando pode habilitar a ponte com os `IN` em estado
+> indefinido. O sintoma é um tranco nas rodas toda vez que liga. O resistor
+> amarra o `EN` em BAIXO nesse intervalo. Vale ainda mais aqui porque o GPIO 20 é
+> o `U0RXD`, e o bootloader da ROM mexe nele antes do nosso código existir.
 
 ## Divisores de tensão
 
 A ESP32-C3 é 3,3 V e **não tolera 5 V nos GPIO**. Os dois sensores operam em 5 V,
-então cada um tem o seu divisor. Em ambos, `R1` é o resistor em série com o sinal
-e `R2` vai do nó para o GND; o GPIO se conecta ao nó.
+então cada um tem o seu divisor. `R1` fica em série com o sinal, `R2` vai do nó
+para o GND, e o GPIO se conecta ao nó.
 
 ```
  Vout = Vin × R2 / (R1 + R2)
 ```
 
-### 1. `ECHO` do HC-SR04 → GPIO 20
+### 1. `ECHO` do HC-SR04 → GPIO 4
 
 ```
-   ECHO (5 V) ──[ R1 = 1 kΩ ]──┬── GPIO 20
+   ECHO (5 V) ──[ R1 = 1 kΩ ]──┬── GPIO 4
                                │
                           [ R2 = 2 kΩ ]
                                │
@@ -108,38 +125,38 @@ e `R2` vai do nó para o GND; o GPIO se conecta ao nó.
 `Vout = 5 V × 10k / (10k + 10k) = 2,50 V`
 
 **Por que não 1 k / 2 k aqui também:** o `ECHO` é digital e só precisa caber
-abaixo de 3,6 V. Este é analógico, e o ADC da C3 satura perto de 3,1 V — parar
-em 2,5 V mantém a escala inteira dentro da faixa linear, em vez de achatar o
-extremo contra o teto do conversor.
+abaixo de 3,6 V. Este é analógico, e o ADC da C3 satura perto de 3,1 V — parar em
+2,5 V mantém a escala inteira dentro da faixa linear.
 
 **O divisor divide também o limiar.** `IR_LIMIAR_MV` é a tensão medida **no
-GPIO**, já dividida — não a que sai do sensor. Com razão de 0,5, um limiar de
-1600 mV no código corresponde a 3,2 V na saída do módulo.
-
-`TRIG` não precisa de divisor: é entrada do HC-SR04, e os 3,3 V da C3 bastam
-para dispará-lo.
+GPIO**, já dividida. Com razão de 0,5, um limiar de 1600 mV no código corresponde
+a 3,2 V na saída do módulo.
 
 ## Alimentação
 
 | Trilho | Origem | Alimenta |
 |---|---|---|
-| **7,8 V** | bateria, direto | `VM1/VM2/VM3` da TB6612FNG |
-| **5 V** | step-down a partir da bateria | pino `5V` da ESP32, `VCC` do HC-SR04, `VCC` do IR |
-| **3,3 V** | regulador da própria ESP32 | `VCC` da TB6612FNG (pino 20) |
+| **7,8 V** | bateria, direto | `Vs` do L298N (motores) |
+| **5 V** | step-down a partir da bateria | `Vss` do L298N, pino `5V` da ESP32, `VCC` do HC-SR04, `VCC` do IR |
 | **GND** | — | um único ponto comum: bateria, ponte, sensores e ESP |
 
-> **Observação de montagem — o step-down não é opcional.** A bateria **não pode**
-> ir direto na ESP32: o regulador do C3 SuperMini (ME6211) aceita cerca de 6,5 V
-> no máximo, e 7,8 V queima o componente. É preciso um step-down de 5 V entre a
-> bateria e o pino `5V` da placa. Na bancada dá para pular isso alimentando a
-> ESP32 pelo cabo USB, com a bateria ligada só no `VM` da ponte.
+> **O step-down não é opcional.** A bateria **não pode** ir direto na ESP32: o
+> regulador do C3 SuperMini (ME6211) aceita cerca de 6,5 V, e 7,8 V queima o
+> componente. Na bancada dá para pular isso alimentando a ESP32 pelo cabo USB,
+> com a bateria ligada só no `Vs` da ponte.
+
+> Se o seu módulo L298N tiver o regulador de 5 V embarcado com jumper (muitos
+> têm, e ele funciona com `Vs` até 12 V), esse 5 V pode substituir o step-down.
+> Confira no módulo antes de contar com isso.
 
 > **O GND comum não é detalhe de alimentação** — é a referência contra a qual
 > "alto" e "baixo" existem. Um módulo com o terra fora do comum já custou uma
 > sessão inteira de diagnóstico neste projeto.
 
-O `VM` em 7,8 V é proposital: a TB6612FNG aceita até 15 V, e é essa tensão que dá
-agilidade no avanço máximo.
+**O que o L298N custa:** ele é Darlington bipolar e derruba cerca de **2 V** na
+própria ponte, mais sob carga. Dos 7,8 V da bateria o motor vê perto de 5,8 V, e
+a diferença vira calor no dissipador. Uma ponte MOSFET (TB6612, DRV8833) derruba
+~0,5 V no mesmo lugar.
 
 ## Ajuste do comportamento
 
@@ -152,8 +169,8 @@ Os três números que mais mudam ficam no **topo do [`config.h`](config.h)**:
 | `US_ALCANCE_CM` | `60` | até onde um eco conta como oponente |
 
 **Como calibrar o IR:** com o monitor serial aberto, `p` mede o piso preto e `b`
-mede a faixa branca (600 ms cada, e ele avisa se a leitura estiver instável).
-Ponha `IR_LIMIAR_MV` no meio das duas medidas e regrave.
+mede a faixa branca (600 ms cada, e avisa se a leitura estiver instável). Ponha
+`IR_LIMIAR_MV` no meio das duas medidas e regrave.
 
 ## Lógica
 
@@ -166,6 +183,13 @@ A ordem de prioridade é o desenho do firmware, não uma sequência de `if`:
 2. **Alvo** — enquanto o HC-SR04 vê alguém à frente e o IR não vê borda, avança
    em cima e empurra. Abaixo de 18 cm vai com tudo.
 3. **Busca** — sem alvo e sem borda, gira varrendo.
+
+**Como as direções saem de dois motores:** tração diferencial. Frente e ré são as
+duas rodas iguais; girar é uma roda contra a outra. O PWM vai nos pinos `IN` e o
+`EN` fica fixo em ALTO — pela tabela-verdade do L298N isso alterna entre girar e
+frear (decaimento lento), que dá mais torque parado do que PWM no `EN`, que
+alternaria entre girar e roda livre. Num sumô o que decide a partida é o empurrão
+parado.
 
 Modos de combate: `NORMAL`, `LESMA`, `CAPIROTO`, `CACADOR`, `MURALHA`, `DANCINHA`
 — multiplicam a afinação base e trocam pelo painel ou pela tecla `m`.

@@ -9,10 +9,10 @@
     .mot   { fill:#f3f7ef; stroke:#1f2430; stroke-width:2 }
     .res   { fill:#fff8e6; stroke:#1f2430; stroke-width:1.8 }
     .pnl   { fill:#fcfcfa; stroke:#9aa3b2; stroke-width:1.5; stroke-dasharray:6 4 }
+    .grp   { fill:none; stroke:#0b5cab; stroke-width:1.4; stroke-dasharray:5 4 }
     .w     { stroke:#1f2430; stroke-width:2; fill:none; stroke-linecap:square }
     .wpwr  { stroke:#c8102e; stroke-width:2.6; fill:none; stroke-linecap:square }
     .w5    { stroke:#e08b00; stroke-width:2.4; fill:none; stroke-linecap:square }
-    .w33   { stroke:#0b8a4b; stroke-width:2.4; fill:none; stroke-linecap:square }
     .wgnd  { stroke:#1f2430; stroke-width:3.2; fill:none; stroke-linecap:square }
     .t     { font-size:13px; fill:#1f2430 }
     .tsm   { font-size:11.5px; fill:#4a5263 }
@@ -30,95 +30,95 @@
   <rect class="bg" x="0" y="0" width="1240" height="1090"/>
 
   <!-- ================= CABECALHO ================= -->
-  <text class="h1" x="60" y="48">Robô Sumô v3 — esquemático de ligações</text>
-  <text class="h2" x="60" y="70">ESP32-C3 SuperMini · 1× TB6612FNG · 2× motor DC · 1× HC-SR04 · 1× IR analógico · bateria 7,8 V</text>
+  <text class="h1" x="60" y="48">Robô Sumô v4 — esquemático de ligações</text>
+  <text class="h2" x="60" y="70">ESP32-C3 SuperMini · 1× L298N · 2× motor DC · 1× HC-SR04 · 1× IR analógico · bateria 7,8 V</text>
   <line x1="60" y1="84" x2="1180" y2="84" stroke="#d6dae2" stroke-width="1.5"/>
 
   <!-- ================= ESP32-C3 ================= -->
   <rect class="chip" x="440" y="150" width="200" height="380" rx="6"/>
   <text class="ttl" x="540" y="178" text-anchor="middle">ESP32-C3</text>
   <text class="ttl" x="540" y="196" text-anchor="middle">SuperMini</text>
-  <text class="tsm" x="540" y="214" text-anchor="middle">RISC-V · núcleo único</text>
 
-  <text class="pin" x="452" y="248">GPIO 0</text>
-  <text class="tsm" x="452" y="262">ADC1_CH0</text>
-  <text class="pin" x="452" y="289">GPIO 10</text>
-  <text class="pin" x="452" y="329">GPIO 20</text>
-  <text class="pin" x="452" y="409">GPIO 21</text>
+  <!-- fileira B, a esquerda -->
+  <text class="tsm" x="452" y="218">fileira B</text>
+  <text class="pin" x="452" y="234">GPIO 0</text>
+  <text class="tsm" x="500" y="234">ADC1</text>
+  <text class="pin" x="452" y="304">GPIO 3</text>
+  <text class="pin" x="452" y="344">GPIO 4</text>
 
-  <text class="pin" x="628" y="209" text-anchor="end">GPIO 3</text>
-  <text class="pin" x="628" y="239" text-anchor="end">GPIO 4</text>
-  <text class="pin" x="628" y="279" text-anchor="end">GPIO 5</text>
-  <text class="pin" x="628" y="309" text-anchor="end">GPIO 6</text>
-  <text class="pin" x="628" y="359" text-anchor="end">GPIO 7</text>
+  <!-- fileira A, a direita -->
+  <text class="tsm" x="628" y="218" text-anchor="end">fileira A</text>
+  <text class="pin" x="628" y="204" text-anchor="end">GPIO 5</text>
+  <text class="pin" x="628" y="234" text-anchor="end">GPIO 6</text>
+  <text class="pin" x="628" y="264" text-anchor="end">GPIO 7</text>
+  <text class="pin" x="628" y="304" text-anchor="end">GPIO 10</text>
+  <text class="pin" x="628" y="354" text-anchor="end">GPIO 20</text>
+  <text class="pin" x="628" y="424" text-anchor="end">GPIO 21</text>
 
   <text class="pin" x="462" y="512">5V</text>
-  <text class="pin" x="540" y="512" text-anchor="middle">3V3</text>
   <text class="pin" x="620" y="512" text-anchor="end">GND</text>
 
   <!-- ================= SENSORES (esquerda) ================= -->
-  <rect class="box" x="110" y="170" width="160" height="80" rx="5"/>
-  <text class="ttl" x="190" y="198" text-anchor="middle">IR de borda</text>
-  <text class="tsm" x="190" y="214" text-anchor="middle">saída analógica</text>
-  <text class="pin" x="258" y="244" text-anchor="end">AO</text>
+  <rect class="box" x="110" y="190" width="160" height="80" rx="5"/>
+  <text class="ttl" x="190" y="218" text-anchor="middle">IR de borda</text>
+  <text class="tsm" x="190" y="234" text-anchor="middle">saída analógica</text>
+  <text class="pin" x="258" y="264" text-anchor="end">AO</text>
 
-  <rect class="box" x="110" y="270" width="160" height="100" rx="5"/>
-  <text class="ttl" x="190" y="296" text-anchor="middle">HC-SR04</text>
-  <text class="pin" x="258" y="304" text-anchor="end">TRIG</text>
-  <text class="pin" x="258" y="344" text-anchor="end">ECHO</text>
+  <rect class="box" x="110" y="290" width="160" height="100" rx="5"/>
+  <text class="ttl" x="190" y="316" text-anchor="middle">HC-SR04</text>
+  <text class="pin" x="258" y="324" text-anchor="end">TRIG</text>
+  <text class="pin" x="258" y="364" text-anchor="end">ECHO</text>
 
-  <rect class="box" x="110" y="390" width="160" height="70" rx="5"/>
-  <text class="ttl" x="190" y="414" text-anchor="middle">Receptor edital</text>
-  <text class="tsm" x="190" y="430" text-anchor="middle">reservado</text>
-  <text class="pin" x="258" y="452" text-anchor="end">OUT</text>
+  <path class="w" d="M270,230 H440"/>
+  <text class="net" x="286" y="224">AO · divisor 10k/10k</text>
 
-  <!-- fios sensores -> ESP32 -->
-  <path class="w" d="M270,240 H440"/>
-  <text class="net" x="286" y="234">AO · divisor 10k/10k</text>
+  <path class="w" d="M270,320 H355 V300 H440"/>
+  <text class="net" x="286" y="314">TRIG</text>
 
-  <path class="w" d="M270,300 H355 V285 H440"/>
-  <text class="net" x="286" y="296">TRIG</text>
+  <path class="w" d="M270,360 H385 V340 H440"/>
+  <text class="net" x="286" y="376">ECHO · divisor 1k/2k</text>
 
-  <path class="w" d="M270,340 H385 V325 H440"/>
-  <text class="net" x="286" y="356">ECHO · divisor 1k/2k</text>
+  <!-- ================= L298N ================= -->
+  <rect class="box" x="790" y="150" width="200" height="300" rx="5"/>
+  <text class="ttl" x="890" y="178" text-anchor="middle">L298N</text>
+  <text class="tsm" x="890" y="194" text-anchor="middle">módulo micro</text>
 
-  <path class="w" d="M270,448 H400 V405 H440"/>
-  <text class="net" x="286" y="442">reservado</text>
+  <text class="pin" x="802" y="204">IN1</text>
+  <text class="pin" x="802" y="234">IN2</text>
+  <text class="pin" x="802" y="264">IN3</text>
+  <text class="pin" x="802" y="304">IN4</text>
+  <text class="pin" x="802" y="354">ENA + ENB</text>
 
-  <!-- ================= TB6612FNG ================= -->
-  <rect class="box" x="790" y="150" width="200" height="340" rx="5"/>
-  <text class="ttl" x="890" y="178" text-anchor="middle">TB6612FNG</text>
-  <text class="tsm" x="890" y="194" text-anchor="middle">ponte H dupla</text>
+  <text class="pin" x="978" y="224" text-anchor="end">OUT1 / OUT2</text>
+  <text class="pin" x="978" y="344" text-anchor="end">OUT3 / OUT4</text>
+  <text class="tsm" x="890" y="432" text-anchor="middle">Vs 7,8 V · Vss 5 V · GND</text>
 
-  <text class="pin" x="802" y="209">AIN1</text>
-  <text class="pin" x="802" y="239">AIN2</text>
-  <text class="pin" x="802" y="279">BIN1</text>
-  <text class="pin" x="802" y="309">BIN2</text>
-  <text class="pin" x="802" y="359">STBY</text>
-  <text class="pin" x="802" y="409">PWMA</text>
-  <text class="pin" x="802" y="439">PWMB</text>
+  <!-- fios ESP32 -> ponte: cinco retos, sem cruzamento -->
+  <path class="w" d="M640,200 H790"/>
+  <path class="w" d="M640,230 H790"/>
+  <path class="w" d="M640,260 H790"/>
+  <path class="w" d="M640,300 H790"/>
+  <path class="w" d="M640,350 H790"/>
 
-  <text class="pin" x="978" y="224" text-anchor="end">AO1 / AO2</text>
-  <text class="pin" x="978" y="344" text-anchor="end">BO1 / BO2</text>
-  <text class="tsm" x="890" y="470" text-anchor="middle">VM 7,8 V · VCC 3,3 V · GND</text>
+  <!-- grupo do conector unico -->
+  <rect class="grp" x="632" y="186" width="166" height="128" rx="6"/>
+  <text class="net" x="715" y="182" text-anchor="middle">um conector de 6 vias (8 e 9 sem contato)</text>
 
-  <!-- fios ESP32 -> ponte: ponto a ponto, sem cruzamento -->
-  <path class="w" d="M640,205 H790"/>
-  <path class="w" d="M640,235 H790"/>
-  <path class="w" d="M640,275 H790"/>
-  <path class="w" d="M640,305 H790"/>
-  <path class="w" d="M640,355 H790"/>
-  <text class="net" x="668" y="199">PWM canal A</text>
-  <text class="net" x="668" y="269">PWM canal B</text>
-  <text class="net" x="668" y="349">standby</text>
+  <!-- pull-down do EN -->
+  <circle class="dot" cx="755" cy="350" r="3.5"/>
+  <path class="w" d="M755,350 V382"/>
+  <rect class="res" x="743" y="382" width="24" height="52" rx="3"/>
+  <text class="tsm" x="772" y="412">10 kΩ</text>
+  <path class="wgnd" d="M755,434 V450"/>
+  <path class="wgnd" d="M741,452 H769"/>
+  <path class="wgnd" d="M746,458 H764"/>
+  <text class="net" x="700" y="344">EN</text>
 
-  <!-- PWMA / PWMB em 3V3 -->
-  <path class="w33" d="M700,405 H790"/>
-  <path class="w33" d="M700,439 H790"/>
-  <path class="w33" d="M700,405 V439"/>
-  <circle class="dot" cx="700" cy="422" r="3"/>
-  <text class="net" x="656" y="426" fill="#0b8a4b">3V3</text>
-  <text class="tsm" x="656" y="464">jumper: libera 2 GPIOs</text>
+  <!-- receptor reservado -->
+  <path class="w" d="M640,420 H700 V504 H790"/>
+  <rect class="box" x="790" y="478" width="200" height="52" rx="5"/>
+  <text class="ttl" x="890" y="500" text-anchor="middle">Receptor do edital</text>
+  <text class="tsm" x="890" y="518" text-anchor="middle">pino reservado — sem leitura ainda</text>
 
   <!-- ================= MOTORES ================= -->
   <rect class="mot" x="1050" y="193" width="130" height="55" rx="27"/>
@@ -132,7 +132,7 @@
   <path class="w" d="M990,220 H1050"/>
   <path class="w" d="M990,340 H1050"/>
 
-  <text class="note" x="60" y="556">GPIO 2, 8 e 9 são strapping e ficam livres · GPIO 18/19 são o USB nativo · o Serial vai por USB CDC, o que libera a UART0 (GPIO 20/21)</text>
+  <text class="note" x="60" y="556">GPIO 2, 8 e 9 são strapping e ficam sem contato · GPIO 18/19 são o USB nativo · o Serial vai por USB CDC, o que libera o par 20/21</text>
 
   <!-- ================================================================ -->
   <!--                    PAINEL: DIVISORES DE TENSAO                   -->
@@ -150,7 +150,7 @@
   <text class="t" x="254" y="703" text-anchor="middle">1 kΩ</text>
   <path class="w" d="M283,699 H395"/>
   <circle class="dot" cx="330" cy="699" r="3.5"/>
-  <text class="net" x="400" y="703">GPIO 20</text>
+  <text class="net" x="400" y="703">GPIO 4</text>
 
   <path class="w" d="M330,699 V727"/>
   <rect class="res" x="318" y="727" width="24" height="58" rx="3"/>
@@ -190,17 +190,16 @@
   <!-- ================================================================ -->
   <rect class="pnl" x="650" y="575" width="530" height="480" rx="8"/>
   <text class="ttl" x="672" y="604">Alimentação</text>
-  <text class="tsm" x="672" y="622">três trilhos e um único terra</text>
+  <text class="tsm" x="672" y="622">dois trilhos e um único terra</text>
 
-  <!-- bateria -->
   <rect class="box" x="672" y="645" width="130" height="54" rx="5"/>
   <text class="ttl" x="737" y="668" text-anchor="middle">Bateria</text>
   <text class="t" x="737" y="688" text-anchor="middle">7,8 V</text>
 
-  <!-- ramo 1: direto no VM -->
+  <!-- ramo 1: direto no Vs -->
   <path class="wpwr" d="M802,660 H840 V636 H890"/>
   <rect class="box" x="890" y="616" width="250" height="40" rx="5"/>
-  <text class="t" x="1015" y="641" text-anchor="middle">VM da TB6612FNG (máx. 15 V)</text>
+  <text class="t" x="1015" y="641" text-anchor="middle">Vs do L298N — motores</text>
 
   <!-- ramo 2: step-down -->
   <path class="wpwr" d="M802,684 H840 V722 H890"/>
@@ -209,40 +208,37 @@
   <text class="t" x="965" y="736" text-anchor="middle">5 V</text>
 
   <!-- trilho 5 V -->
-  <path class="w5" d="M965,744 V772 M700,772 H1140"/>
-  <text class="net" x="706" y="765" fill="#e08b00">5V</text>
-  <path class="w5" d="M745,772 V796"/>
-  <text class="t" x="700" y="812">ESP32 · 5V</text>
-  <path class="w5" d="M935,772 V796"/>
-  <text class="t" x="893" y="812">HC-SR04</text>
-  <path class="w5" d="M1085,772 V796"/>
-  <text class="t" x="1055" y="812">IR</text>
-
-  <!-- trilho 3V3 -->
-  <path class="w33" d="M745,834 V862 M700,862 H1140"/>
-  <text class="net" x="706" y="855" fill="#0b8a4b">3V3</text>
-  <text class="tsm" x="672" y="838">regulador da ESP32 →</text>
-  <path class="w33" d="M1000,862 V886"/>
-  <rect class="box" x="880" y="886" width="240" height="38" rx="5"/>
-  <text class="t" x="1000" y="910" text-anchor="middle">VCC da TB6612FNG — 3,3 V</text>
+  <path class="w5" d="M965,744 V790 M690,790 H1150"/>
+  <text class="net" x="696" y="783" fill="#e08b00">5V</text>
+  <path class="w5" d="M730,790 V818"/>
+  <text class="t" x="694" y="834">ESP32 · 5V</text>
+  <path class="w5" d="M870,790 V818"/>
+  <text class="t" x="830" y="834">L298N · Vss</text>
+  <path class="w5" d="M1000,790 V818"/>
+  <text class="t" x="962" y="834">HC-SR04</text>
+  <path class="w5" d="M1110,790 V818"/>
+  <text class="t" x="1092" y="834">IR</text>
 
   <!-- terra -->
-  <path class="wgnd" d="M700,950 H1140"/>
-  <text class="net" x="706" y="943">GND comum</text>
-  <path class="wgnd" d="M820,950 V932"/>
-  <text class="tsm" x="800" y="927">bateria</text>
-  <path class="wgnd" d="M900,950 V932"/>
-  <text class="tsm" x="884" y="927">ESP32</text>
-  <path class="wgnd" d="M1060,950 V932"/>
-  <text class="tsm" x="1040" y="927">sensores</text>
-  <path class="wgnd" d="M1140,950 V966"/>
-  <path class="wgnd" d="M1124,968 H1156"/>
-  <path class="wgnd" d="M1130,975 H1150"/>
-  <path class="wgnd" d="M1136,982 H1144"/>
+  <path class="wgnd" d="M690,900 H1150"/>
+  <text class="net" x="696" y="893">GND comum</text>
+  <path class="wgnd" d="M830,900 V882"/>
+  <text class="tsm" x="810" y="877">bateria</text>
+  <path class="wgnd" d="M920,900 V882"/>
+  <text class="tsm" x="904" y="877">ESP32</text>
+  <path class="wgnd" d="M1010,900 V882"/>
+  <text class="tsm" x="994" y="877">L298N</text>
+  <path class="wgnd" d="M1100,900 V882"/>
+  <text class="tsm" x="1080" y="877">sensores</text>
+  <path class="wgnd" d="M1150,900 V916"/>
+  <path class="wgnd" d="M1134,918 H1166"/>
+  <path class="wgnd" d="M1140,925 H1160"/>
+  <path class="wgnd" d="M1146,932 H1154"/>
 
-  <text class="warn" x="672" y="1002">O step-down NÃO é opcional: o regulador do C3 SuperMini (ME6211) aceita ~6,5 V,</text>
-  <text class="warn" x="672" y="1018">e 7,8 V o queima. Na bancada dá para alimentar a ESP32 pelo USB.</text>
-  <text class="warn" x="672" y="1040">VCC da ponte em 3,3 V, não 5 V: a datasheet pede VIH = VCC × 0,7, e com 5 V isso</text>
-  <text class="warn" x="672" y="1056">daria 3,5 V — acima do que a C3 entrega. Com 3,3 V o limiar cai para 2,31 V.</text>
+  <text class="warn" x="672" y="962">O step-down NÃO é opcional: o regulador do C3 SuperMini (ME6211) aceita ~6,5 V,</text>
+  <text class="warn" x="672" y="978">e 7,8 V o queima. Na bancada dá para alimentar a ESP32 pelo USB.</text>
+  <text class="note" x="672" y="1000">A lógica do L298N (Vss) quer 4,5 a 7 V — por isso 5 V, e não 3,3 V. Já as ENTRADAS</text>
+  <text class="note" x="672" y="1016">pedem Vih ≥ 2,3 V, então os 3,3 V da C3 comandam a ponte direto, sem level shifter.</text>
+  <text class="note" x="672" y="1038">Se o seu módulo tiver o regulador de 5 V com jumper, ele pode substituir o step-down.</text>
 
 </svg>

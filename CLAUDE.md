@@ -3,9 +3,13 @@
 ## O que é
 
 Firmware de um robô de sumô autônomo da categoria Mini Sumô. **ESP32-C3
-SuperMini**, 2 motores DC, 1 ponte **TB6612FNG**, 1 HC-SR04 (o "olho") e 1 sensor
-IR de borda lido pela **saída analógica**. O painel de controle é servido pela
-própria placa, num ponto de acesso Wi-Fi aberto.
+SuperMini** com extension board, 2 motores DC, 1 ponte **L298N** (módulo micro),
+1 HC-SR04 (o "olho") e 1 sensor IR de borda lido pela **saída analógica**. O
+painel de controle é servido pela própria placa, num ponto de acesso Wi-Fi aberto.
+
+A pinagem é feita para encaixar: `IN1`…`IN4` ocupam a fileira `5 · 6 · 7 · 10`
+(as posições do 8 e do 9 ficam sem contato no conector) e o HC-SR04 fica no par
+adjacente `3`/`4`.
 
 A pinagem oficial, os divisores de tensão e a lista de material estão no
 [README.md](README.md); o esquemático em [docs/schematic.svg](docs/schematic.svg).
@@ -79,9 +83,13 @@ A ordem de prioridade do comportamento é o desenho do firmware: **borda** vence
 - **Sem `ARDUINO_USB_CDC_ON_BOOT` não há Serial.** O C3 SuperMini não tem chip
   USB-serial; o USB é nativo do MCU. Esse silêncio já foi confundido com
   firmware travado no boot.
-- **`VCC` da TB6612FNG vai em 3,3 V, não em 5 V.** A datasheet dá
-  `VIH = VCC × 0,7`: com 5 V o nível ALTO exigiria 3,5 V, acima do que a C3
-  entrega. O `VM` dos motores é independente e continua na bateria.
+- **O `EN` do L298N precisa de pull-down externo de 10 kΩ.** Entre ligar e o
+  `setup()` rodar o GPIO ainda não é saída e flutua; `EN` flutuando pode
+  habilitar a ponte com os `IN` indefinidos, e o robô dá um tranco ao ligar.
+- **Com `EN` em ALTO o L298N não tem roda livre**: `IN1`=`IN2` freia, em ALTO ou
+  em BAIXO. Soltar o motor exige baixar o `EN`.
+- **A lógica do L298N (`Vss`) quer 5 V**, não 3,3 V. As entradas são outra coisa:
+  pedem `Vih ≥ 2,3 V`, e os 3,3 V da C3 passam com folga.
 - **A bateria não vai na ESP32.** O regulador do C3 SuperMini (ME6211) aceita
   cerca de 6,5 V; 7,8 V o queima. Step-down de 5 V, ou USB na bancada.
 - **ADC2 não funciona com o Wi-Fi ligado.** O IR está no ADC1 por isso.

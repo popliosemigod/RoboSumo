@@ -3,6 +3,42 @@
 Formato: [Conventional Commits](https://www.conventionalcommits.org/pt-br/) ·
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## 4.0.0 — ponte L298N e pinagem de encaixe
+
+### Alterado
+
+- **Ponte: TB6612FNG → L298N (módulo micro).** Mesma topologia de 2 rodas; o
+  antigo `STBY` virou `ENA`+`ENB` amarrados num GPIO só.
+- **Pinagem rearranjada para a ponte encaixar de uma vez.** `IN1`…`IN4` ficam na
+  fileira `5 · 6 · 7 · 10` — uma barra de 6 vias cobrindo 5 → 10, com as posições
+  do 8 e do 9 **sem contato**, porque são pinos de strapping. Não existe corrida
+  de quatro pinos úteis seguidos nesta placa: o 2 quebra uma fileira, o 8 e o 9
+  quebram a outra.
+- O `EN` foi para o GPIO 20 e o HC-SR04 ganhou o par adjacente `3`/`4`, então ele
+  também entra num conector só.
+- `vMax` subiu de 820 para 900, para compensar parte da queda do L298N.
+
+### Consequências da tabela-verdade do L298N
+
+- O PWM continua nos pinos `IN`, não no `EN`: com `EN` em ALTO, chavear `IN2`
+  enquanto `IN1` fica em ALTO alterna girar ↔ freio, que é decaimento lento. PWM
+  no `EN` alternaria entre girar e roda livre, que dá menos torque parado.
+- **Com `EN` em ALTO o L298N não tem roda livre**: `IN1`=`IN2` freia, em ALTO ou
+  em BAIXO. Por isso `Mot::coast()` passou a baixar o `EN` — antes ele deixaria a
+  ponte freando.
+
+### Montagem
+
+- **Pull-down de 10 kΩ do `EN` para o GND.** Entre ligar e o `setup()` rodar o
+  GPIO 20 ainda não é saída e flutua; `EN` flutuando pode habilitar a ponte com
+  os `IN` indefinidos, e o sintoma é um tranco nas rodas ao ligar. Agrava que o
+  GPIO 20 é o `U0RXD`, mexido pelo bootloader da ROM.
+- A lógica do L298N (`Vss`) quer **5 V**, não 3,3 V. Já as entradas pedem
+  `Vih ≥ 2,3 V`, então os 3,3 V da C3 comandam a ponte direto — some o aperto de
+  margem que a TB6612 tinha quando alimentada em 5 V.
+- O L298N derruba cerca de **2 V** na própria ponte: dos 7,8 V o motor vê perto
+  de 5,8 V, e o resto vira calor.
+
 ## 3.0.0 — eletrônica enxuta
 
 Duas rodas, uma ponte, e a borda lida por tensão em vez de por nível lógico.

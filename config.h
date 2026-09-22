@@ -45,8 +45,30 @@
 //
 //  Sobram dez, e e com dez que este projeto fecha - com um de reserva.
 //
+//  COMO OS PINOS SE DISTRIBUEM NAS DUAS FILEIRAS DA EXTENSION BOARD:
+//
+//    Fileira A:   5    6    7   [8]  [9]   10    20      21
+//                IN1  IN2  IN3   -    -   IN4    EN   receptor
+//
+//    Fileira B:   0     1   [2]   3      4
+//                 IR  livre  -   TRIG  ECHO
+//
+//  A PONTE H INTEIRA MORA NA FILEIRA A, em ordem. E de proposito: o
+//  modulo L298N encaixa num conector unico de 6 vias cobrindo 5..10, com
+//  as posicoes do 8 e do 9 SEM CONTATO (pino removido do conector).
+//
+//  Por que essas duas posicoes ficam vazias: 8 e 9 sao strapping. O 9 e
+//  o BOOT - se algo o puxar para baixo no instante do reset, a placa
+//  entra em modo de gravacao e o firmware nunca roda. Nao existe corrida
+//  de QUATRO pinos uteis seguidos nesta placa: o 2 quebra a fileira B, o
+//  8 e o 9 quebram a A. Tres seguidos e o maximo, e e por isso que o IN4
+//  pula para o 10 em vez de continuar a sequencia.
+//
+//  O HC-SR04 ficou com o par adjacente 3/4 da fileira B, entao ele
+//  tambem entra de uma vez, num conector de 2 vias.
+//
 //  O Serial vai por USB CDC, que e o que libera o par 20/21 (seriam a
-//  UART0) para o ECHO e o receptor do edital.
+//  UART0) para o EN e o receptor do edital.
 // ---------------------------------------------------------------------
 
 // ---- Motores / 1x L298N (modulo micro) ------------------------------
@@ -90,12 +112,20 @@
 //  propria ponte, mais sob carga. Dos 7,8 V da bateria o motor ve algo
 //  perto de 5,8 V, e a diferenca vira calor no dissipador.
 //
-#define PIN_IN1          3   // canal A (esquerda) - recebe PWM
-#define PIN_IN2          4   // canal A (esquerda) - recebe PWM
-#define PIN_IN3          5   // canal B (direita)  - recebe PWM
-#define PIN_IN4          6   // canal B (direita)  - recebe PWM
-#define PIN_EN           7   // ENA + ENB juntos. ALTO = habilitado
+#define PIN_IN1          5   // canal A (esquerda) - recebe PWM
+#define PIN_IN2          6   // canal A (esquerda) - recebe PWM
+#define PIN_IN3          7   // canal B (direita)  - recebe PWM
+#define PIN_IN4         10   // canal B (direita)  - recebe PWM  (pula 8 e 9)
+#define PIN_EN          20   // ENA + ENB juntos. ALTO = habilitado
                              // (nasce em BAIXO: saidas soltas = seguro)
+//
+//  PONHA UM PULL-DOWN DE 10k DO EN PARA O GND. Entre aplicar energia e o
+//  setup() rodar existe quase um segundo em que este GPIO ainda nao e
+//  saida - ele flutua, e EN flutuando pode habilitar a ponte com os IN
+//  em estado indefinido. O sintoma e um tranco nas rodas toda vez que
+//  liga. O resistor amarra o EN em BAIXO nesse intervalo, e o firmware o
+//  levanta quando quer. Vale ainda mais aqui: o GPIO 20 e o U0RXD, e o
+//  bootloader da ROM mexe nele antes do nosso codigo existir.
 
 // ---- Olho: 1x HC-SR04 (ultrassonico) --------------------------------
 //
@@ -106,7 +136,7 @@
 //  TRIG aceita os 3,3 V da C3 direto. O ECHO NAO: ele sai em 5 V, e o
 //  GPIO da C3 nao tolera isso. Vai por DIVISOR 1 k / 2 k:
 //
-//      ECHO --[ 1k ]--+--> GPIO 20
+//      ECHO --[ 1k ]--+--> GPIO 4
 //                     |
 //                   [ 2k ]
 //                     |
@@ -117,8 +147,8 @@
 //  ECHO e lido por INTERRUPCAO, nao por pulseIn(). O pulseIn() e espera
 //  ocupada e seguraria a CPU por ate 38 ms por leitura - numa placa de
 //  nucleo unico isso disputaria tempo com a guarda de borda.
-#define PIN_US_TRIG     10
-#define PIN_US_ECHO     20
+#define PIN_US_TRIG      3   // fileira B, vizinho do ECHO
+#define PIN_US_ECHO      4   // fileira B - via divisor 1k/2k
 
 // Teto de espera do eco, em microssegundos. 25 ms ~ 4,3 m, que e o fim
 // da escala do modulo: alem disso nao ha eco para esperar, so atraso.

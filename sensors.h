@@ -162,7 +162,7 @@ void selfTest() {
                   (unsigned long)echoLarg, (long)(echoLarg / 58UL));
   else
     Serial.println("[teste] HC-SR04: NENHUM eco. Se nao ha nada a 4 m isso e normal; "
-                   "se ha, confira TRIG(10), ECHO(20), o divisor 1k/2k e o GND comum.");
+                   "se ha, confira TRIG(3), ECHO(4), o divisor 1k/2k e o GND comum.");
 
   Serial.printf("[teste] L298N ENA/ENB (GPIO %u) = %s\n",
                 PIN_EN, digitalRead(PIN_EN) ? "habilitado" : "saidas soltas");

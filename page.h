@@ -1,10 +1,12 @@
 // =====================================================================
-//  ROBO SUMO v2 - page.h
-//  Painel minimo: leitura dos sensores e um botao de start/stop.
+//  ROBO SUMO v3 - page.h
+//  Painel minimo: leitura dos sensores, start/stop, modos e pilotagem
+//  manual das duas rodas.
 //
-//  A afinacao saiu daqui de proposito. Slider de PID no celular parece
-//  controle e nao e: mexer nele durante a luta e adivinhacao, e entre uma
-//  luta e outra o ajuste certo e no codigo, com o numero anotado.
+//  O que NAO tem aqui e ajuste de parametro. Slider no celular parece
+//  controle e nao e: o numero que funcionou nao fica versionado nem
+//  comentado, e na sessao seguinte ninguem sabe se o valor em uso e o do
+//  codigo ou o que sobrou na NVS.
 // =====================================================================
 #pragma once
 
@@ -30,13 +32,21 @@ h2{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim)
 .st{text-align:center;font-size:19px;font-weight:700;letter-spacing:.04em;padding:4px 0 10px}
 .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
 .on{background:rgba(61,220,132,.16);color:var(--ok)}
-.off{background:rgba(148,155,173,.16);color:var(--dim)}
 .al{background:rgba(255,91,91,.16);color:var(--bad)}
-button{width:100%;padding:16px;font-size:17px;font-weight:700;border:0;border-radius:12px;
-       color:#12141a;background:var(--ok);cursor:pointer;letter-spacing:.03em}
+button{font:inherit;border:0;border-radius:12px;cursor:pointer;color:#12141a;background:var(--ok);
+       padding:16px;font-size:17px;font-weight:700;width:100%;letter-spacing:.03em}
 button.stop{background:var(--bad);color:#fff}
 .row{display:flex;gap:10px;margin-top:10px}
 .row button{font-size:14px;padding:12px;background:var(--line);color:var(--tx);font-weight:600}
+/* teclado de direcao: duas rodas so permitem cinco comandos */
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;justify-items:stretch}
+.pad button{background:var(--line);color:var(--tx);font-size:22px;padding:18px 0;font-weight:700}
+.pad button:active{background:var(--acc);color:#12141a}
+.pad .sp{visibility:hidden}
+.pad .halt{background:rgba(255,91,91,.18);color:var(--bad)}
+.modes{display:flex;flex-wrap:wrap;gap:8px}
+.modes button{width:auto;flex:1 1 30%;padding:10px 6px;font-size:13px;background:var(--line);color:var(--tx);font-weight:600}
+.modes button.sel{background:var(--acc);color:#12141a}
 .foot{color:var(--dim);font-size:12px;text-align:center;margin-top:14px}
 </style></head><body>
 
@@ -45,8 +55,26 @@ button.stop{background:var(--bad);color:#fff}
 <div class="card">
   <div class="st" id="st">--</div>
   <button id="go">START</button>
-  <div class="row">
-    <button onclick="cmd('reboot')">Reiniciar</button>
+  <div class="row"><button onclick="cmd('reboot')">Reiniciar</button></div>
+</div>
+
+<div class="card">
+  <h2>Modo de combate</h2>
+  <div class="modes" id="modes"></div>
+</div>
+
+<div class="card">
+  <h2>Pilotagem manual</h2>
+  <div class="pad">
+    <span class="sp"></span>
+    <button onpointerdown="dir('fwd')"  onpointerup="dir('stop')" onpointercancel="dir('stop')">&#9650;</button>
+    <span class="sp"></span>
+    <button onpointerdown="dir('left')" onpointerup="dir('stop')" onpointercancel="dir('stop')">&#9664;</button>
+    <button class="halt" onpointerdown="dir('stop')">&#9632;</button>
+    <button onpointerdown="dir('right')" onpointerup="dir('stop')" onpointercancel="dir('stop')">&#9654;</button>
+    <span class="sp"></span>
+    <button onpointerdown="dir('back')" onpointerup="dir('stop')" onpointercancel="dir('stop')">&#9660;</button>
+    <span class="sp"></span>
   </div>
 </div>
 
@@ -59,21 +87,16 @@ button.stop{background:var(--bad);color:#fff}
 </div>
 
 <div class="card">
-  <h2>Borda &mdash; IR</h2>
+  <h2>Borda &mdash; IR analogico</h2>
   <div class="kv"><span>Leitura</span><b id="ir">--</b></div>
-  <div class="kv"><span>Pino</span><b id="irdo">--</b></div>
+  <div class="kv"><span>AO (ja dividido)</span><b id="irmv">-- mV</b></div>
+  <div class="kv"><span>Limiar no codigo</span><b id="lim">-- mV</b></div>
   <div class="kv"><span>Salvamentos nesta luta</span><b id="ne">0</b></div>
 </div>
 
 <div class="card">
-  <h2>Motores</h2>
-  <div class="kv"><span>PWM esquerda / direita</span><b id="pwm">0 / 0</b></div>
-  <div class="kv"><span>DRV8833</span><b id="flt">--</b></div>
-</div>
-
-<div class="card">
   <h2>Sistema</h2>
-  <div class="kv"><span>Juiz (Artigo 33)</span><b id="juiz">--</b></div>
+  <div class="kv"><span>PWM esquerda / direita</span><b id="pwm">0 / 0</b></div>
   <div class="kv"><span>Ataques / perdas</span><b id="na">0 / 0</b></div>
   <div class="kv"><span>Malha de controle</span><b id="hz">-- Hz</b></div>
   <div class="kv"><span>Ligado ha</span><b id="up">--</b></div>
@@ -83,10 +106,25 @@ button.stop{background:var(--bad);color:#fff}
 
 <script>
 const $=i=>document.getElementById(i);
-const JZ=['espera','READY','START','STOP'];
+const MODOS=['NORMAL','LESMA','CAPIROTO','CACADOR','MURALHA','DANCINHA'];
+let modoAtual=-1, dirAtual='stop';
 
 function cmd(c){fetch('/api/cmd?c='+c).then(tick)}
 $('go').onclick=()=>cmd($('go').dataset.a||'arm');
+
+/* Botoes de modo, montados uma vez */
+MODOS.forEach((n,i)=>{
+  const b=document.createElement('button');
+  b.textContent=n; b.id='md'+i;
+  b.onclick=()=>fetch('/api/mode?m='+i).then(tick);
+  $('modes').appendChild(b);
+});
+
+/* Pilotagem: o comando e REENVIADO a cada 300 ms enquanto o botao esta
+   pressionado. Isso mantem vivo o corte por silencio do firmware - se a
+   aba fechar ou o Wi-Fi cair, o robo para sozinho em 700 ms. */
+function dir(d){ dirAtual=d; fetch('/api/drive?d='+d); }
+setInterval(()=>{ if(dirAtual!=='stop') fetch('/api/drive?d='+dirAtual); },300);
 
 function pill(el,txt,cls){el.innerHTML='<span class="pill '+cls+'">'+txt+'</span>'}
 
@@ -99,6 +137,11 @@ function tick(){
   if(d.armed){b.textContent='STOP';b.className='stop';b.dataset.a='stop'}
   else       {b.textContent='START';b.className='';b.dataset.a='arm'}
 
+  if(d.mode!==modoAtual){
+    if(modoAtual>=0) $('md'+modoAtual).classList.remove('sel');
+    modoAtual=d.mode; $('md'+modoAtual).classList.add('sel');
+  }
+
   $('dist').textContent = d.d>0 ? d.d+' cm' : 'sem alvo';
   $('dist').style.color = d.d>0 ? 'var(--acc)' : 'var(--dim)';
   $('echo').textContent = d.us ? d.us+' us' : '0 us (sem eco)';
@@ -106,18 +149,16 @@ function tick(){
   $('fail').textContent = d.fail;
 
   pill($('ir'), d.ir?'VENDO BORDA':'seguro', d.ir?'al':'on');
-  $('irdo').textContent = d.irdo?'ALTO':'BAIXO';
+  $('irmv').textContent = d.irmv+' mV';
+  $('lim').textContent  = d.lim+' mV';
   $('ne').textContent   = d.ne;
 
   $('pwm').textContent = d.pl+' / '+d.pr;
-  pill($('flt'), d.flt?'EM FALHA':'ok', d.flt?'al':'on');
-
-  $('juiz').textContent = JZ[d.juiz]||'--';
-  $('na').textContent   = d.na+' / '+d.nl;
-  $('hz').textContent   = d.hz+' Hz';
+  $('na').textContent  = d.na+' / '+d.nl;
+  $('hz').textContent  = d.hz+' Hz';
   const s=Math.floor(d.up/1000);
-  $('up').textContent   = Math.floor(s/60)+'m '+(s%60)+'s';
-  $('fw').textContent   = d.fw;
+  $('up').textContent  = Math.floor(s/60)+'m '+(s%60)+'s';
+  $('fw').textContent  = d.fw;
  }).catch(()=>{$('st').textContent='sem conexao';$('st').style.color='var(--bad)'});
 }
 tick();setInterval(tick,200);
